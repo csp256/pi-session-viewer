@@ -39,6 +39,9 @@
   --rose-soft: #392732;
 }
 
+/* 通过样式规则切换，让生产构建生成的 light-dark 回退也随主题更新。 */
+:root[data-theme='light'] { color-scheme: light; }
+
 * { box-sizing: border-box; }
 
 html,

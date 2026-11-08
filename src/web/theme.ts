@@ -17,7 +17,7 @@ export function useTheme() {
   const [theme, setTheme] = useState<Theme>(initialTheme)
 
   useLayoutEffect(() => {
-    document.documentElement.style.colorScheme = theme
+    document.documentElement.dataset.theme = theme
     document.querySelector('meta[name="theme-color"]')?.setAttribute(
       'content', getComputedStyle(document.documentElement).backgroundColor,
     )

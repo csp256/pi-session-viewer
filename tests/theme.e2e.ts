@@ -70,6 +70,20 @@ test('按钮位于语言和刷新按钮之间；深色覆盖会话面板及详�
   await expect(page.locator('.content-body-wrap pre')).toHaveCSS('color', 'rgb(224, 232, 229)')
   await page.screenshot({ path: 'test-results/theme-dark-desktop.png' })
 
+  await theme.click()
+  for (const [selector, color] of [
+    ['.app-header', 'rgb(237, 240, 239)'],
+    ['.session-sidebar', 'rgb(247, 249, 248)'],
+    ['.inspector', 'rgb(251, 252, 251)'],
+    ['.branch-bar', 'rgb(248, 250, 249)'],
+    ['.content-body-wrap pre', 'rgb(244, 246, 247)'],
+  ]) {
+    await expect(page.locator(selector)).toHaveCSS('background-color', color)
+  }
+  await expect(page.locator('.content-body-wrap pre')).toHaveCSS('color', 'rgb(38, 48, 45)')
+  await page.screenshot({ path: 'test-results/theme-light-desktop.png' })
+  await page.getByRole('button', { name: 'Switch to dark mode' }).click()
+
   await page.getByRole('button', { name: 'EN / 中' }).click()
   await expect(page.getByRole('button', { name: '切换为浅色模式' })).toBeVisible()
   await page.setViewportSize({ width: 390, height: 844 })

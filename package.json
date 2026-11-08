@@ -52,6 +52,7 @@
     "start": "node dist/standalone/index.js",
     "test": "vitest run --fileParallelism=false",
     "test:ui": "playwright test",
+    "test:ui:production": "npm run build && playwright test --config playwright.production.config.ts",
     "test:package": "node scripts/test-package.mjs",
     "check:sessions": "tsx scripts/check-real-sessions.ts",
     "fixtures:refresh": "node scripts/refresh-fixtures.mjs",
