@@ -124,6 +124,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     document.documentElement.lang = locale
+    document.title = translations[locale].common.productName
   }, [locale])
 
   const t = useMemo(() => translations[locale], [locale])
