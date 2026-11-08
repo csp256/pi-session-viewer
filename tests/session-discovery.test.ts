@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { appendFile, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -105,6 +105,61 @@ describe('SessionCatalogDiscovery at Filesystem Seam', () => {
   })
 
   describe('discoverSessionCatalog filesystem traversal', () => {
+    it('读取前缀之后追加的最新名称，并在重命名后更新缓存', async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), 'pi-session-names-'))
+      directories.push(root)
+      const file = path.join(root, 'named.jsonl')
+      const entry = (id: string, name: unknown) => JSON.stringify({
+        type: 'session_info', id, parentId: null, timestamp: '2026-01-01T10:00:00.000Z', name,
+      })
+      await writeFile(file, [
+        piSessionHeader('named', '2026-01-01T10:00:00.000Z', '/work/demo'),
+        entry('early', 'Original name'),
+        JSON.stringify({ type: 'custom', id: 'large', data: 'x'.repeat(300_000) }),
+        entry('latest', '发布检查 · Release review'),
+        '{"type":"session_info",',
+        entry('invalid', 42),
+        entry('empty', ''),
+      ].join('\n') + '\n')
+
+      const first = (await listSessions(root)).sessions[0]
+      expect(first.name).toBe('发布检查 · Release review')
+      expect(first.title).toBe(first.name)
+      expect((await listSessions(root)).sessions[0]).toEqual(first)
+
+      await appendFile(file, entry('rename', 'Renamed release review') + '\n')
+      const renamed = (await listSessions(root)).sessions[0]
+      expect(renamed.name).toBe('Renamed release review')
+      expect(renamed.title).toBe(renamed.name)
+    })
+
+    it('短会话保留显式名称，未命名会话使用用户消息或文件名', async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), 'pi-session-name-fallback-'))
+      directories.push(root)
+      const header = (id: string) => piSessionHeader(id, '2026-01-01T10:00:00.000Z', '/work/demo')
+      const user = JSON.stringify({
+        type: 'message', id: 'user', parentId: null, timestamp: '2026-01-01T10:00:01.000Z',
+        message: { role: 'user', content: 'First user request' },
+      })
+      await writeFile(path.join(root, 'short.jsonl'), [header('short'), user, JSON.stringify({
+        type: 'session_info', id: 'info', parentId: 'user', name: 'Short named session',
+      })].join('\n'))
+      await writeFile(path.join(root, 'unnamed.jsonl'), [header('unnamed'), user].join('\n'))
+      await writeFile(path.join(root, 'empty.jsonl'), header('empty'))
+      await writeFile(path.join(root, 'large-unnamed.jsonl'), [header('large-unnamed'), user,
+        JSON.stringify({ type: 'custom', id: 'large', data: 'x'.repeat(300_000) }),
+      ].join('\n'))
+
+      const sessions = (await listSessions(root)).sessions
+      expect(sessions.find((s) => s.id === 'short')).toMatchObject({ name: 'Short named session', title: 'Short named session' })
+      for (const id of ['unnamed', 'large-unnamed']) {
+        const session = sessions.find((s) => s.id === id)!
+        expect(session.name).toBeUndefined()
+        expect(session.title).toBe('First user request')
+      }
+      expect(sessions.find((s) => s.id === 'empty')?.title).toBe('empty.jsonl')
+    })
+
     it('discovers top-level sessions, excludes subagents/mirrors, and pre-groups catalog', async () => {
       const root = await mkdtemp(path.join(os.tmpdir(), 'pi-session-catalog-test-'))
       directories.push(root)

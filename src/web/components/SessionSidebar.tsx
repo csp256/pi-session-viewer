@@ -164,7 +164,12 @@ export function SessionSidebar({
           >
             <MessageSquareText size={17} aria-hidden="true" />
             <span className="session-item-copy">
-              <strong>{session.title}</strong>
+              <strong
+                className={session.name ? 'session-item-name' : undefined}
+                title={session.name || session.title}
+              >
+                {session.name || session.title}
+              </strong>
               <span>
                 {formatDateTime(session.timestamp ?? session.modifiedAt)}
                 {scopeMode === 'all' && session.projectName ? ` · ${localizeTitle(session.projectName)}` : ''}
