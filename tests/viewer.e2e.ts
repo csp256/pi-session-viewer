@@ -1,3 +1,4 @@
+import { enableDetailedEventFilters } from './helpers/timeline-filters'
 import { expect, test } from '@playwright/test'
 import { decodeSessionToken, encodeSessionToken } from '../src/core/session-token'
 import { subagentTargetCandidates } from '../src/core/subagent-detector'
@@ -136,6 +137,7 @@ test('opens a single subagent directly without showing a chooser', async ({ page
   })
 
   await page.goto('/#token=dev-token&cwd=/work/demo')
+  await enableDetailedEventFilters(page)
   await expect(page.locator('.header-session strong')).toHaveText('Open one child session')
   const invocationRow = page.locator('.event-row[data-event-id="single-assistant:tool:0"]')
   const resultRow = page.locator('.event-row[data-event-id="single-result:result"]')
@@ -249,6 +251,7 @@ test('opens workflow children from the invoking subagent call', async ({ page })
   })
 
   await page.goto('/#token=dev-token&cwd=/work/demo')
+  await enableDetailedEventFilters(page)
   const invocationRow = page.locator('.event-row[data-event-id="workflow-assistant:tool:0"]')
   const resultRow = page.locator('.event-row[data-event-id="workflow-result:result"]')
   const opener = invocationRow.locator('.event-subagent-tag')
@@ -276,6 +279,7 @@ test('browses a Pi session end to end on desktop and narrow screens', async ({ p
   page.on('pageerror', (error) => browserErrors.push(`${error.message} @ `))
 
   await page.goto('/#token=dev-token')
+  await enableDetailedEventFilters(page)
   await page.setViewportSize({ width: 1280, height: 1200 })
   await expect(page).toHaveURL(/127\.0\.0\.1:\d+\/$/)
   await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/favicon.svg')

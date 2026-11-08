@@ -11,9 +11,5 @@ export const allEventKinds: EventKind[] = [
   'system',
 ]
 
-/**
- * The filters a fresh viewer starts with. Pi's `system` entries (model switches,
- * context edits, usage rows) are incidental bookkeeping, so they stay hidden
- * until the reader opts into them; the conversation is what opens first.
- */
-export const defaultEventKinds: EventKind[] = allEventKinds.filter((kind) => kind !== 'system')
+// 首次打开仅显示对话；其余事件类型仍可通过筛选器或显式跳转显示。
+export const defaultEventKinds: EventKind[] = ['user', 'assistant']

@@ -1,3 +1,4 @@
+import { enableDetailedEventFilters } from './helpers/timeline-filters'
 import { performance } from 'node:perf_hooks'
 import { expect, test } from '@playwright/test'
 
@@ -175,6 +176,7 @@ test('virtualizes and preserves a 2,000-event grouped timeline', async ({ page }
   })
 
   await page.goto('/#token=dev-token')
+  await enableDetailedEventFilters(page)
   const rows = page.locator('.event-row')
   await expect(page.locator('.header-session strong')).toContainText('Synthetic request 1')
   await expect(page.locator('.branch-bar')).toContainText('2400 visible events')
@@ -464,6 +466,7 @@ test('keeps the large virtualized timeline reachable without horizontal overflow
   })
 
   await page.goto('/#token=dev-token')
+  await enableDetailedEventFilters(page)
   await expect(page.locator('.branch-bar')).toContainText('2400 visible events')
   const scrollContainer = page.locator('.timeline-scroll')
   const rows = scrollContainer.locator('.event-row')
@@ -613,6 +616,7 @@ test('restores a large parent timeline anchor after subagent navigation', async 
   })
 
   await page.goto('/#token=dev-token')
+  await enableDetailedEventFilters(page)
   const sessionList = page.locator('.session-list')
   const parentSession = sessionList.locator('.session-item').filter({ hasText: 'Synthetic large parent' })
   await expect(parentSession).toBeVisible()
