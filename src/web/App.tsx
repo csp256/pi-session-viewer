@@ -1,4 +1,4 @@
-import { AlertCircle, ArrowLeft, Bot, Clock3, Copy, Menu, PanelRightOpen, RefreshCw, Rows3, X } from 'lucide-react'
+import { AlertCircle, ArrowLeft, Bot, Clock3, Copy, Menu, Moon, PanelRightOpen, RefreshCw, Rows3, Sun, X } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { fetchSession, fetchSessions, resolveSession } from './api'
 import { Inspector } from './components/Inspector'
@@ -17,6 +17,7 @@ import type {
   TimelineEvent,
 } from '../core/types'
 import { useI18n } from './i18n'
+import { useTheme } from './theme'
 
 const initialCatalogLoadControllers = new WeakSet<object>()
 
@@ -97,6 +98,7 @@ function measurePerformance<T>(name: string, work: () => T): T {
 
 function App() {
   const { t, locale, setLocale } = useI18n()
+  const { theme, toggleTheme } = useTheme()
   const [accessToken] = useState<string | null>(() => browserAccessToken())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
@@ -276,6 +278,15 @@ function App() {
             <span className={locale === 'en' ? 'active' : ''}>EN</span>
             <span className="lang-separator">/</span>
             <span className={locale === 'zh-CN' ? 'active' : ''}>中</span>
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            onClick={toggleTheme}
+            title={theme === 'dark' ? t.header.switchToLight : t.header.switchToDark}
+            aria-label={theme === 'dark' ? t.header.switchToLight : t.header.switchToDark}
+          >
+            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
           </button>
           <button
             className="icon-button"

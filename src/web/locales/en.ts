@@ -26,6 +26,8 @@ export const en = {
     closeInspector: 'Close details',
     closeOverlay: 'Close overlay',
     language: 'Language',
+    switchToLight: 'Switch to light mode',
+    switchToDark: 'Switch to dark mode',
     backToParent: 'Back to parent session',
     subagentBadge: 'Subagent',
     loadingSubagent: 'Loading subagent session...',

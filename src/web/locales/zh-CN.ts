@@ -28,6 +28,8 @@ export const zhCN: Translations = {
     closeInspector: '关闭详情',
     closeOverlay: '关闭浮层',
     language: '语言',
+    switchToLight: '切换为浅色模式',
+    switchToDark: '切换为深色模式',
     backToParent: '返回父会话',
     subagentBadge: '子 Agent',
     loadingSubagent: '正在加载子 Agent 会话...',

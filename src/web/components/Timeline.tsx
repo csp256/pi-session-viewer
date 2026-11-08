@@ -8,14 +8,14 @@ import type { ContextProjection, EventKind, ParsedSession, SubagentReference, Ti
 import { useI18n } from '../i18n'
 
 const kindMeta: Record<EventKind, { icon: ComponentType<{ size?: number; className?: string }>; color: string }> = {
-  'system-prompt': { icon: ScrollText, color: '#8a4f68' },
-  'tool-definitions': { icon: Boxes, color: '#2f6f8f' },
-  user: { icon: CircleUserRound, color: '#485c66' },
-  assistant: { icon: Bot, color: '#246b83' },
-  thinking: { icon: Brain, color: '#765a9a' },
-  'tool-call': { icon: Wrench, color: '#a66a18' },
-  'tool-result': { icon: CheckCircle2, color: '#2f7d57' },
-  system: { icon: Cog, color: '#66716d' },
+  'system-prompt': { icon: ScrollText, color: 'light-dark(#8a4f68, var(--rose))' },
+  'tool-definitions': { icon: Boxes, color: 'light-dark(#2f6f8f, var(--blue))' },
+  user: { icon: CircleUserRound, color: 'light-dark(#485c66, var(--muted))' },
+  assistant: { icon: Bot, color: 'light-dark(#246b83, var(--blue))' },
+  thinking: { icon: Brain, color: 'light-dark(#765a9a, var(--violet))' },
+  'tool-call': { icon: Wrench, color: 'light-dark(#a66a18, var(--amber))' },
+  'tool-result': { icon: CheckCircle2, color: 'light-dark(#2f7d57, var(--green))' },
+  system: { icon: Cog, color: 'light-dark(#66716d, var(--muted))' },
 }
 
 interface TimelineProps {
@@ -153,7 +153,7 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
       }}
       data-llm-output-group={llmOutputBoundary?.id}
       data-tool-call-id={event.toolCallId}
-      style={{ '--event-color': event.isError ? '#b24b4b' : meta.color } as React.CSSProperties}
+      style={{ '--event-color': event.isError ? 'light-dark(#b24b4b, var(--red))' : meta.color } as React.CSSProperties}
     >
       <span className="event-time">
         <span>{clockLabel}</span>

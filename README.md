@@ -25,6 +25,7 @@ Restart Pi or run `/reload`. The extension loads automatically and begins captur
 - Starting the viewer opens a local tokenized dashboard in your browser.
 - Session switches (`/new`, `/resume`, `/fork`) require running `/session-viewer on` again.
 - Discover sessions directly from Pi's storage or import any `.jsonl` session file via the browser.
+- The viewer defaults to dark mode. Use the sun/moon button between the language toggle and refresh button to switch themes; your browser remembers the choice for the viewer's origin.
 
 ## Key Features
 
