@@ -220,6 +220,7 @@ export interface SessionListItem {
   token: string
   id: string
   title: string
+  name?: string
   cwd: string
   projectName?: string
   timestamp?: string

@@ -194,12 +194,18 @@ export function parseSessionJsonl(content: string, sourceName = 'Local file'): P
   }
 }
 
-export function getSessionTitle(session: ParsedSession): string {
-  let name: string | undefined
-  for (let index = session.entries.length - 1; index >= 0 && !name; index -= 1) {
+export function getSessionName(session: ParsedSession): string | undefined {
+  for (let index = session.entries.length - 1; index >= 0; index -= 1) {
     const entry = session.entries[index]
-    if (entry.type === 'session_info') name = stringValue(entry.raw.name)
+    if (entry.type !== 'session_info') continue
+    const name = stringValue(entry.raw.name)
+    if (name) return name
   }
+  return undefined
+}
+
+export function getSessionTitle(session: ParsedSession): string {
+  const name = getSessionName(session)
   if (name) return name
   // The first user message on the current branch, read from the entry list. A
   // title is shown on every render, so it must not build the whole view: that
