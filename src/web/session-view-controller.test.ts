@@ -120,15 +120,18 @@ describe('Session View controller', () => {
     expect(controller.getSnapshot().selectedEventId).toBe('user-1:user')
   })
 
-  it('starts with the conversation event kinds enabled and system bookkeeping filtered out', async () => {
+  it('默认只启用用户与 Pi 回复，并在打开会话时保持筛选', async () => {
     const controller = createController(async (token) => payload(token, content('Alpha request')))
 
-    expect([...controller.getSnapshot().enabledKinds].sort()).toEqual([...defaultEventKinds].sort())
+    expect([...controller.getSnapshot().enabledKinds].sort()).toEqual(['assistant', 'user'])
     expect(controller.getSnapshot().enabledKinds.has('system')).toBe(false)
 
     await controller.dispatch({ type: 'open', session: session('alpha') })
 
-    expect(controller.getSnapshot().enabledKinds.has('system')).toBe(false)
+    expect([...controller.getSnapshot().enabledKinds].sort()).toEqual(['assistant', 'user'])
+    expect(controller.getSnapshot().visibleTurns.flatMap((turn) => turn.events).every(
+      (event) => event.kind === 'user' || event.kind === 'assistant',
+    )).toBe(true)
   })
 
   it('uses the exact cached version without reading or parsing it again', async () => {
@@ -222,6 +225,7 @@ describe('Session View controller', () => {
     const branchA = controller.getSnapshot().active!.parsed.branches.find((branch) => branch.leafId === 'assistant-a')!
     await controller.dispatch({ type: 'select-branch', leafId: branchA.leafId })
     await controller.dispatch({ type: 'select-event', eventId: 'assistant-a:assistant:0' })
+    await controller.dispatch({ type: 'ensure-event-kind', kind: 'thinking' })
     await controller.dispatch({ type: 'toggle-event-kind', kind: 'thinking' })
 
     listed = { ...listed, modifiedAt: 'm2', title: 'Changed Session' }
@@ -287,6 +291,7 @@ describe('Session View controller', () => {
     expect(controller.getSnapshot().restoreIntent?.eventId).toBe('assistant-a:assistant:0')
     expect(controller.getSnapshot().restoreIntent?.revealEventKind).toBe(true)
 
+    await controller.dispatch({ type: 'ensure-event-kind', kind: 'system-prompt' })
     await controller.dispatch({ type: 'toggle-event-kind', kind: 'system-prompt' })
     await controller.dispatch({ type: 'select-branch', leafId: 'assistant-b' })
     expect(controller.getSnapshot().selectedEventId).toBe('missing-system-prompt:user-1')
@@ -311,6 +316,7 @@ describe('Session View controller', () => {
       'assistant-b': { leafId: 'assistant-b', messageCount: 3, contextEntryCount: 3, excluded: {} },
     }
     const controller = createController(async (token) => ({ ...payload(token, forkedContent()), contextProjections: projections }))
+    await controller.dispatch({ type: 'ensure-event-kind', kind: 'thinking' })
     await controller.dispatch({ type: 'toggle-event-kind', kind: 'thinking' })
     await controller.dispatch({ type: 'open', session: session('alpha') })
     await controller.dispatch({ type: 'select-branch', leafId: 'assistant-a' })
@@ -414,6 +420,7 @@ describe('Session View controller', () => {
     await controller.dispatch({ type: 'open', session: session(encodeSessionToken(parentPath), 'parent-v1', parentPath) })
     await controller.dispatch({ type: 'select-branch', leafId: 'assistant-a' })
     await controller.dispatch({ type: 'select-event', eventId: 'assistant-a:assistant:0' })
+    await controller.dispatch({ type: 'ensure-event-kind', kind: 'thinking' })
     await controller.dispatch({ type: 'toggle-event-kind', kind: 'thinking' })
     await controller.dispatch({
       type: 'open-subagent',

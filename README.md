@@ -29,7 +29,7 @@ Restart Pi or run `/reload`. The extension loads automatically and begins captur
 
 ## Key Features
 
-- **Timeline & Causality**: Tracks user turns, thinking blocks, and paired tool calls with visual causality rails.
+- **Timeline & Causality**: Starts with only User and Pi Response events visible. Enable thinking, tool calls/results, and other event types with the filters to inspect their visual causality rails.
 - **System Prompt Breakdown**: Inspects prompt structure across base instructions, tool definitions, skills, and context files.
 - **Multi-Project Catalog**: Groups sessions by project working directory with automatic path collision disambiguation.
 - **Local JSONL Import**: Inspect arbitrary session files offline via file drag-and-drop.
