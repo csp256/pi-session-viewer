@@ -14,6 +14,8 @@ pi install npm:@hfrancisla/pi-session-viewer
 
 重启 Pi 或执行 `/reload`。扩展将自动加载，并在下一轮对话起开始捕获系统提示词。
 
+Pi 通过 TypeScript 入口加载后端，确保 `/reload` 使用最新源码，而非复用 Node 缓存的已编译 ESM。本地更新后运行 `npm run build`，然后执行 `/reload` 与 `/session-viewer on`，并使用新打开的面板标签页。
+
 ## 使用方法
 
 ```text
