@@ -679,7 +679,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
         restoreFrameRef.current = null
       }
     }
-  }, [allEvents, correctAnchorOffset, enabledKinds, eventIndexById, onEnsureEventKindEnabled, onRestorePositionApplied, restorePosition])
+  }, [allEvents, correctAnchorOffset, enabledKinds, eventIndexById, onEnsureEventKindEnabled, onRestorePositionApplied, restorePosition, order, timelineItems.length])
 
   return (
     <section className="timeline-panel" aria-label={t.timeline.ariaLabel}>

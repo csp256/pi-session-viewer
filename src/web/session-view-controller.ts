@@ -124,6 +124,16 @@ export type SessionViewIntent<FileHandle = unknown> =
   | { type: 'acknowledge-timeline-restore'; key: number }
   | { type: 'dismiss-action-error' }
 
+export interface SessionViewBookmark {
+  token: string
+  leafId: string | null
+  eventId: string | null
+  viewport: SessionViewViewport
+  enabledKinds: EventKind[]
+  scopeMode: 'current' | 'all'
+  projectCwd: string | null
+}
+
 export interface SessionViewControllerDependencies<FileHandle = unknown> {
   readContext?(token: string, signal?: AbortSignal, modifiedAt?: string): Promise<Record<string, ContextProjection> | null>
   readServerSession(token: string, signal?: AbortSignal, leafId?: string, fresh?: boolean, afterVersion?: string): Promise<SessionFileResponse>
@@ -134,6 +144,7 @@ export interface SessionViewControllerDependencies<FileHandle = unknown> {
   parseSession(content: string, sourceName: string): ParsedSession
   buildView?(parsed: ParsedSession, leafId?: string | null, projection?: ContextProjection): SessionView
   now(): string
+  initialRestore?: SessionViewBookmark | null
   initialCwd?: string | null
   initialCatalogLoading?: boolean
 }
@@ -337,6 +348,7 @@ export function createSessionViewController<FileHandle = unknown>(
       warnings: [],
     },
   })
+  let initialRestore = dependencies.initialRestore
   let latestSessionChange = 0
   let restoreKey = 0
   const listeners = new Set<() => void>()
@@ -379,6 +391,11 @@ export function createSessionViewController<FileHandle = unknown>(
     revealEventKind,
     key: ++restoreKey,
   })
+
+  const restoreViewport = (viewport?: SessionViewViewport | null, eventId: string | null = null) => {
+    if (viewport?.atNewest) return { ...makeRestore(null), followNewest: true }
+    return makeRestore(eventId, viewport?.scrollTop, viewport?.anchor)
+  }
 
   const rememberViewport = (token: string, position: RememberedSessionView) => {
     rememberedViewports.delete(token)
@@ -436,6 +453,8 @@ export function createSessionViewController<FileHandle = unknown>(
   }
 
   const dispatchOpen = async (session: SessionListItem) => {
+    const bookmark = initialRestore?.token === session.token ? initialRestore : null
+    initialRestore = null
     const sequence = beginSessionChange()
     const signal = pendingRequest.signal
     try {
@@ -461,7 +480,12 @@ export function createSessionViewController<FileHandle = unknown>(
       }
       if (!isLatest(sequence)) return
       requirePiSession(active.parsed)
-      commit(active, active.parsed.currentLeafId, null, makeRestore(null, 0), [])
+      if (bookmark) {
+        update({ enabledKinds: new Set(bookmark.enabledKinds), catalog: { ...snapshot.catalog,
+          scopeMode: bookmark.scopeMode, selectedProjectCwd: bookmark.projectCwd } })
+      }
+      commit(active, bookmark?.leafId ?? active.parsed.currentLeafId, bookmark?.eventId ?? null,
+        bookmark ? restoreViewport(bookmark.viewport) : makeRestore(null, 0), [])
     } catch (error) {
       if (!isLatest(sequence)) return
       update({ loading: false, loadError: isControllerError(error) ? error : failed() })
@@ -539,9 +563,8 @@ export function createSessionViewController<FileHandle = unknown>(
 
     if (autoOpen && payload && payload.sessions.length > 0) {
       if (!snapshot.active && !snapshot.loading) {
-        const initialSession = payload.initialSessionToken
-          ? payload.sessions.find((s) => s.token === payload.initialSessionToken)
-          : payload.sessions[0]
+        const initialSession = payload.sessions.find((session) => session.token === initialRestore?.token)
+          ?? (payload.initialSessionToken ? payload.sessions.find((session) => session.token === payload.initialSessionToken) : payload.sessions[0])
         if (initialSession) {
           await dispatchOpen(initialSession)
         }
@@ -591,7 +614,7 @@ export function createSessionViewController<FileHandle = unknown>(
         const parsed = parsePiSession(dependencies.parseSession, content, activeAtStart.source.imported.name)
         const active = { ...activeAtStart, parsed }
         const selected = reconcile(parsed, null, snapshot.selectedLeafId, snapshot.selectedEventId, buildView)
-        const restoreIntent = makeRestore(selected.selectedEventId, viewport?.scrollTop, viewport?.anchor)
+        const restoreIntent = restoreViewport(viewport, selected.selectedEventId)
         commit(active, selected.selectedLeafId, selected.selectedEventId, restoreIntent)
         return
       }
@@ -605,7 +628,8 @@ export function createSessionViewController<FileHandle = unknown>(
       const listedMetadata = catalog ? snapshot.catalog.sessions.find((item) => item.token === serverSource.token) : undefined
       if (listedMetadata && listedMetadata.modifiedAt === serverSource.modifiedAt && !activeAtStart.parsed.preparedRefreshNeeded) {
         const active = { ...activeAtStart, metadata: listedMetadata }
-        publish({ ...snapshot, active, loading: false, loadError: null })
+        publish({ ...snapshot, active, loading: false, loadError: null,
+          restoreIntent: viewport?.atNewest ? restoreViewport(viewport) : snapshot.restoreIntent })
         void loadDeferredContext(active, sequence, signal)
         return
       }
@@ -628,7 +652,7 @@ export function createSessionViewController<FileHandle = unknown>(
       }
       rememberSession(dependencies.cache, serverSource.token, payload.modifiedAt, payload.content, parsed, contextProjections)
       const selected = reconcile(parsed, contextProjections, snapshot.selectedLeafId, snapshot.selectedEventId, buildView)
-      const restoreIntent = makeRestore(selected.selectedEventId, viewport?.scrollTop, viewport?.anchor)
+      const restoreIntent = restoreViewport(viewport, selected.selectedEventId)
       commit(active, selected.selectedLeafId, selected.selectedEventId, restoreIntent)
     } catch (error) {
       if (!isLatest(sequence)) return
@@ -852,8 +876,7 @@ export function createSessionViewController<FileHandle = unknown>(
         const contextProjections = response.snapshot?.contextProjections ?? (projection?.leafId ? { [projection.leafId]: projection } : null)
         const next = { ...active, parsed, contextProjections,
           source: { ...active.source, modifiedAt }, metadata: active.metadata ? { ...active.metadata, modifiedAt } : null }
-        const restore = makeRestore(null, intent.viewport?.scrollTop, intent.viewport?.anchor)
-        if (intent.viewport?.atNewest) { restore.anchor = undefined; restore.scrollTop = undefined; restore.followNewest = true }
+        const restore = restoreViewport(intent.viewport)
         rememberSession(dependencies.cache, intent.token, modifiedAt, '', parsed, contextProjections)
         commit(next, leaf, snapshot.selectedEventId, restore)
         return

@@ -20,6 +20,7 @@ import type {
   TimelineEvent,
 } from '../core/types'
 import { useI18n } from './i18n'
+import { readReloadPosition, writeReloadPosition } from './reload-position'
 import { useLiveSession } from './use-live-session'
 import { useTheme } from './theme'
 import { createLruCache } from '../core/lru-cache'
@@ -137,6 +138,7 @@ function App() {
       () => buildSessionView(parsed, leafId, projection),
     ),
     now: () => new Date().toISOString(),
+    initialRestore: readReloadPosition(),
     initialCwd: browserInitialCwd(),
     initialCatalogLoading: Boolean(accessToken),
   }))
@@ -165,10 +167,14 @@ function App() {
   const activeContextProjection = sessionState.contextProjection
   const selectedEvent = sessionState.selectedEvent
   const previousPrompt = sessionState.previousPrompt
-  const acceptLiveUpdate = useCallback(async (response: LiveSessionResponse, token: string, leaf: string | null) => {
-    await controller.dispatch({ type: 'live-update', token, leaf, response, viewport: timelineRef.current?.getViewport() ?? null })
-    return controller.getSnapshot().active?.parsed.liveCursor === response.cursor
+  const captureViewport = useCallback(() => {
+    const viewport = timelineRef.current?.getViewport() ?? null
+    return viewport && controller.getSnapshot().restoreIntent?.followNewest ? { ...viewport, atNewest: true } : viewport
   }, [controller])
+  const acceptLiveUpdate = useCallback(async (response: LiveSessionResponse, token: string, leaf: string | null) => {
+    await controller.dispatch({ type: 'live-update', token, leaf, response, viewport: captureViewport() })
+    return controller.getSnapshot().active?.parsed.liveCursor === response.cursor
+  }, [controller, captureViewport])
   const live = useLiveSession({ token: selectedToken, accessToken, onUpdate: acceptLiveUpdate,
     leaf: sessionState.selectedLeafId === parsedSession?.currentLeafId ? null : sessionState.selectedLeafId,
     available: Boolean(selectedToken && !sessionLoading && !parsedSession?.preparedRefreshNeeded),
@@ -205,17 +211,32 @@ function App() {
     void controller.dispatch({ type: 'acknowledge-timeline-restore', key })
   }, [controller])
 
+  useEffect(() => {
+    const savePosition = () => {
+      const current = controller.getSnapshot()
+      const viewport = captureViewport()
+      if (current.active?.token && viewport) {
+        writeReloadPosition({ token: current.active.token, viewport, eventId: current.selectedEventId,
+          leafId: current.selectedLeafId === current.active.parsed.currentLeafId ? null : current.selectedLeafId,
+          enabledKinds: [...current.enabledKinds], scopeMode: current.catalog.scopeMode, projectCwd: current.catalog.selectedProjectCwd })
+      } else if (!current.loading && !current.loadError) writeReloadPosition(null)
+    }
+    window.addEventListener('beforeunload', savePosition)
+    window.addEventListener('pagehide', savePosition)
+    return () => { window.removeEventListener('beforeunload', savePosition); window.removeEventListener('pagehide', savePosition) }
+  }, [controller, captureViewport])
+
   const refreshCurrent = useCallback(() => {
-    const viewport = timelineRef.current?.getViewport() ?? null
+    const viewport = captureViewport()
     void controller.dispatch({ type: 'refresh', viewport })
-  }, [controller])
+  }, [controller, captureViewport])
   useEffect(() => {
     if (!parsedSession?.preparedRefreshNeeded) return
     const frame = requestAnimationFrame(() => {
-      void controller.dispatch({ type: 'refresh', viewport: timelineRef.current?.getViewport() ?? null })
+      void controller.dispatch({ type: 'refresh', viewport: captureViewport() })
     })
     return () => cancelAnimationFrame(frame)
-  }, [controller, parsedSession])
+  }, [controller, parsedSession, captureViewport])
 
   const openServerSession = useCallback((session: SessionListItem) => {
     setSidebarOpen(false)
