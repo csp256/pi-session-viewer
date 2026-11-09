@@ -189,6 +189,9 @@ export const en = {
       recordTypeReference: 'Snapshot reference',
     },
     views: {
+      contentLoadError: 'Could not load the full event text.',
+      rawLoadError: 'Could not load the original entry.',
+      retryRaw: 'Retry',
       noContent: 'This event has no text content.',
       noRaw: 'No raw data',
     },
@@ -201,6 +204,7 @@ export const en = {
     },
   },
   overview: {
+    updatingSnapshot: 'Showing saved timeline; updating recent entries…',
     failedToOpen: 'Failed to open session',
     sessionSummary: 'Session Overview',
     entries: 'Entries',

@@ -7,6 +7,7 @@ import { formatClock, formatDuration } from '../../core/format'
 import type { ContextProjection, EventKind, ParsedSession, SubagentReference, TimelineEvent, TimelineTurn } from '../../core/types'
 import { useI18n } from '../i18n'
 import { orderTimelineTurns, useTimelineOrder } from '../timeline-order'
+import type { EventContentLoader } from '../event-content'
 
 const EventReader = lazy(() => import('./EventReader').then((module) => ({ default: module.EventReader })))
 
@@ -22,6 +23,7 @@ const kindMeta: Record<EventKind, { icon: ComponentType<{ size?: number; classNa
 }
 
 interface TimelineProps {
+  loadContent?: EventContentLoader
   session: ParsedSession
   turns: TimelineTurn[]
   allEvents: TimelineEvent[]
@@ -127,7 +129,7 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
   const meta = kindMeta[event.kind]
   const Icon = event.kind === 'tool-result' && event.isError ? XCircle : meta.icon
   const isPairRelated = Boolean(highlightedCallId && event.toolCallId === highlightedCallId)
-  const charCount = event.content?.length
+  const charCount = event.contentLength ?? event.content?.length
   const llmOutputClasses = llmOutputBoundary
     ? ` is-llm-output-group${llmOutputBoundary.isStart ? ' llm-output-group-start' : ''}${llmOutputBoundary.isEnd ? ' llm-output-group-end' : ''}`
     : ''
@@ -308,6 +310,7 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
 
 export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timeline({
   session,
+  loadContent,
   turns: chronologicalTurns,
   allEvents,
   selectedEventId,
@@ -328,7 +331,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
   const turns = useMemo(() => orderTimelineTurns(chronologicalTurns, order), [chronologicalTurns, order])
   const [readingEvent, setReadingEvent] = useState<TimelineEvent | null>(null)
   const closeReader = useCallback(() => setReadingEvent(null), [])
-  useEffect(() => setReadingEvent(null), [session.sourceName, session.header?.id, selectedLeafId])
+  useEffect(() => setReadingEvent(null), [session.sourceName, session.header?.id])
   const causalLayout = useMemo(() => buildCausalLayout(allEvents), [allEvents])
   const selectedEvent = useMemo(
     () => allEvents.find((event) => event.id === selectedEventId),
@@ -672,7 +675,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
 
   return (
     <section className="timeline-panel" aria-label={t.timeline.ariaLabel}>
-      {readingEvent && <Suspense fallback={null}><EventReader key={readingEvent.id} event={readingEvent} onClose={closeReader} /></Suspense>}
+      {readingEvent && <Suspense fallback={null}><EventReader key={readingEvent.id} event={readingEvent} onClose={closeReader} loadContent={loadContent} /></Suspense>}
       <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">{focusedAnnouncement}</div>
       <div className="visually-hidden" id="timeline-keyboard-help">{t.timeline.keyboardInstructions}</div>
       <div className="filter-bar">

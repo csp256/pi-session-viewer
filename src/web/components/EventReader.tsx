@@ -4,8 +4,11 @@ import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { TimelineEvent } from '../../core/types'
 import { useI18n } from '../i18n'
+import { useEventContent, type EventContentLoader } from '../event-content'
 
-export function EventReader({ event, onClose }: { event: TimelineEvent; onClose: () => void }) {
+export function EventReader({ event: originalEvent, onClose, loadContent }: { event: TimelineEvent; onClose: () => void; loadContent?: EventContentLoader }) {
+  const loaded = useEventContent(originalEvent, loadContent)
+  const event = loaded.event!
   const { t, localizeTitle } = useI18n()
   const dialog = useRef<HTMLDialogElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
@@ -35,7 +38,9 @@ export function EventReader({ event, onClose }: { event: TimelineEvent; onClose:
           </div>
         </header>
         <div className="event-reader-body" tabIndex={0}>
-          {source ? <pre className="event-reader-source">{content}</pre> : (
+          {loaded.loading ? <div role="status">{t.common.loading}</div> : loaded.failed ? <div role="alert">
+            <p>{t.inspector.views.contentLoadError}</p><button type="button" onClick={loaded.retry}>{t.inspector.views.retryRaw}</button>
+          </div> : source ? <pre className="event-reader-source">{content}</pre> : (
             <div className="event-reader-markdown">
               <Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
                 a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,

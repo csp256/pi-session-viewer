@@ -190,6 +190,9 @@ export const zhCN: Translations = {
       recordTypeReference: '快照引用',
     },
     views: {
+      contentLoadError: '无法加载完整事件正文。',
+      rawLoadError: '无法加载完整原始记录。',
+      retryRaw: '重试',
       noContent: '此事件没有文本内容。',
       noRaw: '无原始数据',
     },
@@ -202,6 +205,7 @@ export const zhCN: Translations = {
     },
   },
   overview: {
+    updatingSnapshot: '已显示保存的时间线，正在更新最新记录…',
     failedToOpen: '无法打开会话',
     sessionSummary: '会话概览',
     entries: '条目',

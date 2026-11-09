@@ -34,6 +34,7 @@ Pi loads the backend through a TypeScript entry so `/reload` picks up backend ch
 
 ## Key Features
 
+- **Large sessions**: A persistent lightweight timeline index avoids repeatedly loading the entire JSONL. Large entry bodies and original Raw records load on demand; full conversation text remains available. Saved timelines appear first while appended entries refresh in the background. The first index build takes longer; superseded requests are cancelled.
 - **Timeline order**: Use the highlighted down/up arrows beside the central pane’s counts to toggle oldest-first / newest-first. The choice is remembered; selection and filters stay unchanged.
 - **Reading view**: Double-click a timeline event for a large, scrollable Markdown/text modal. Use the book button or Shift+Enter as alternatives; switch to source text when needed. Close with Escape, the close button, or the backdrop.
 - **Timeline & Causality**: Starts with only User and Pi Response events visible. Enable thinking, tool calls/results, and other event types with the filters to inspect their visual causality rails.

@@ -205,6 +205,7 @@ export function getSessionName(session: ParsedSession): string | undefined {
 }
 
 export function getSessionTitle(session: ParsedSession): string {
+  if (session.displayTitle) return session.displayTitle
   const name = getSessionName(session)
   if (name) return name
   // The first user message on the current branch, read from the entry list. A

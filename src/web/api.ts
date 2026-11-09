@@ -1,4 +1,4 @@
-import type { SessionFileResponse, SessionListResponse } from '../core/types'
+import type { ContextProjection, RawObject, SessionFileResponse, SessionListResponse } from '../core/types'
 
 const PANEL_UNAVAILABLE_ERROR = 'Viewer server is unavailable or Pi has exited. Run /session-viewer on again from Pi.'
 
@@ -35,22 +35,54 @@ export async function fetchSessions(accessToken: string): Promise<SessionListRes
   }))
 }
 
-export async function fetchSession(token: string, accessToken: string): Promise<SessionFileResponse> {
-  return readJson<SessionFileResponse>(await request(`/api/sessions/${encodeURIComponent(token)}`, {
-    cache: 'no-store',
-    headers: { Authorization: `Bearer ${accessToken}` },
-  }))
+export async function fetchSession(token: string, accessToken: string, signal?: AbortSignal, leafId?: string, fresh = false, afterVersion?: string): Promise<SessionFileResponse> {
+  const params = new URLSearchParams()
+  if (leafId) params.set('leaf', leafId)
+  if (fresh) params.set('fresh', '1')
+  if (afterVersion) params.set('since', afterVersion)
+  const query = params.size ? `?${params}` : ''
+  const response = await request(`/api/sessions/${encodeURIComponent(token)}${query}`, {
+    signal, cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}`, 'X-Pi-Viewer-Compact': '1' },
+  })
+  const payload = await readJson<SessionFileResponse>(response)
+  return response.headers.get('X-Pi-Viewer-Stale') === '1' ? { ...payload, preparedRefreshNeeded: true } : payload
 }
 
 export async function resolveSession(
   target: string,
   parent: string | undefined,
   accessToken: string,
+  signal?: AbortSignal,
 ): Promise<SessionFileResponse> {
   const searchParams = new URLSearchParams({ target })
   if (parent) searchParams.set('parent', parent)
   return readJson<SessionFileResponse>(await request(`/api/resolve?${searchParams.toString()}`, {
+    signal,
     cache: 'no-store',
-    headers: { Authorization: `Bearer ${accessToken}` },
+    headers: { Authorization: `Bearer ${accessToken}`, 'X-Pi-Viewer-Compact': '1' },
   }))
+}
+
+export async function fetchSessionEntry(token: string, id: string, accessToken: string, signal?: AbortSignal): Promise<RawObject> {
+  const params = new URLSearchParams({ session: token, id })
+  return readJson<RawObject>(await request(`/api/entry?${params}`, {
+    signal, cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}` },
+  }))
+}
+
+export async function fetchSessionContext(token: string, accessToken: string, signal?: AbortSignal, modifiedAt?: string): Promise<Record<string, ContextProjection> | null> {
+  const params = new URLSearchParams({ session: token })
+  if (modifiedAt) params.set('modifiedAt', modifiedAt)
+  return readJson<Record<string, ContextProjection> | null>(await request(`/api/context?${params}`, {
+    signal, cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}` },
+  }))
+}
+
+
+export async function fetchEventContent(token: string, entryId: string, eventId: string, accessToken: string, signal?: AbortSignal): Promise<string> {
+  const params = new URLSearchParams({ session: token, entry: entryId, event: eventId })
+  const result = await readJson<{ content: string }>(await request(`/api/content?${params}`, {
+    signal, cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}` },
+  }))
+  return result.content
 }

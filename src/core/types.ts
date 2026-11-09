@@ -147,6 +147,9 @@ export interface ContextProjection {
 }
 
 export interface TimelineEvent {
+  contentDeferred?: boolean
+  contentLength?: number
+  toolDefinitionRef?: number
   id: string
   entryId: string
   kind: EventKind
@@ -194,6 +197,14 @@ export interface SessionStats {
 }
 
 export interface ParsedSession {
+  displayTitle?: string
+  rawEntriesDeferred?: boolean
+  preparedViews?: Record<string, SessionView>
+  preparedBytes?: number
+  preparedRefreshNeeded?: boolean
+  /** Provider signatures omitted from the browser transport; Raw fetches these entries on demand. */
+  deferredRawEntryIds?: string[]
+  contextDeferred?: boolean
   sourceName: string
   header: SessionHeader | null
   entries: ParsedEntry[]
@@ -239,6 +250,10 @@ export interface SessionListResponse {
 }
 
 export interface SessionFileResponse {
+  prepared?: PreparedSessionView
+  preparedRefreshNeeded?: boolean
+  deferredRawEntryIds?: string[]
+  contextDeferred?: boolean
   token: string
   relativePath: string
   modifiedAt: string
@@ -248,4 +263,14 @@ export interface SessionFileResponse {
    * API is unavailable to the server.
    */
   contextProjections?: Record<string, ContextProjection>
+}
+
+
+export interface PreparedSessionView {
+  parsed: ParsedSession
+  leafId: string | null
+  events: TimelineEvent[]
+  turns: Array<Omit<TimelineTurn, 'events'> & { eventIds: string[] }>
+  stats: SessionStats
+  definitions: CapturedToolDefinition[]
 }
