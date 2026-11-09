@@ -34,6 +34,7 @@ Pi loads the backend through a TypeScript entry so `/reload` picks up backend ch
 
 ## Key Features
 
+- **Timeline order**: Toggle Oldest first / Newest first in the central pane. The choice is remembered; selection and filters stay unchanged.
 - **Reading view**: Double-click a timeline event for a large, scrollable Markdown/text modal. Use the book button or Shift+Enter as alternatives; switch to source text when needed. Close with Escape, the close button, or the backdrop.
 - **Timeline & Causality**: Starts with only User and Pi Response events visible. Enable thinking, tool calls/results, and other event types with the filters to inspect their visual causality rails.
 - **System Prompt Breakdown**: Inspects prompt structure across base instructions, tool definitions, skills, and context files.
