@@ -2,7 +2,7 @@ import { appendFile, mkdir, rm, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { expect, test } from '@playwright/test'
 
-test('未打开任何完整会话时，目录就显示大文件的名称并处理追加重命名', async ({ page }) => {
+test('未打开任何完整会话时，目录就显示大文件与派生会话的名称并处理追加重命名', async ({ page }) => {
   const directory = path.resolve('tests/fixtures/sessions/name-index-check')
   const timestamp = '2026-01-01T10:00:00.000Z'
   const info = (id: string, name: string) => JSON.stringify({ type: 'session_info', id, parentId: 'large', timestamp, name }) + '\n'
@@ -10,7 +10,7 @@ test('未打开任何完整会话时，目录就显示大文件的名称并处�
   try {
     for (const id of ['alpha', 'beta']) {
       await writeFile(path.join(directory, `${id}.jsonl`), [
-        JSON.stringify({ type: 'session', version: 3, id, timestamp, cwd: '/work/name-index-check' }),
+        JSON.stringify({ type: 'session', version: 3, id, timestamp, cwd: '/work/name-index-check', ...(id === 'beta' ? { parentSession: path.join(directory, 'alpha.jsonl') } : {}) }),
         JSON.stringify({ type: 'message', id: 'user', parentId: null, timestamp, message: { role: 'user', content: 'Prompt preview, not a name' } }),
         JSON.stringify({ type: 'custom', id: 'large', parentId: 'user', data: 'x'.repeat(2 * 1024 * 1024) }),
       ].join('\n') + '\n' + info('info', `Indexed ${id} session`))

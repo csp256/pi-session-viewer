@@ -159,7 +159,7 @@ describe('production session HTTP server security', () => {
     )
     const server = await createServerWithSessions({
       'plain.jsonl': session('plain'),
-      'parent/child.jsonl': session('child', { parentSession: 'parent-id' }),
+      'parent/fork.jsonl': session('fork', { parentSession: 'parent-id' }),
       'child-id.jsonl': session('SuBaGeNt-child'),
       'subagent-artifacts/root-child.jsonl': session('artifact-child'),
       'subagents/root-child.jsonl': session('root-subagents-child'),
@@ -171,9 +171,10 @@ describe('production session HTTP server security', () => {
       'run-0/session.jsonl': session('ordinary-run-directory'),
       'project/run-0/session.jsonl': session('nested-ordinary-run-directory'),
       '2026-10-18T10-00-00-000Z/session.jsonl': session('date-directory'),
-      'Subagents/standalone.jsonl': session('case-distinct-directory'),
+      // 与小写路径分开放置，避免 macOS 大小写折叠文件系统覆盖测试夹具。
+      'case-variants/Subagents/standalone.jsonl': session('case-distinct-directory'),
       'archive/agent_transcript.jsonl': '{"version":1,"recordType":"message","runId":"mirror"}\n',
-      'archive/agent_Transcript.jsonl': session('case-distinct-transcript'),
+      'case-variants/agent_Transcript.jsonl': session('case-distinct-transcript'),
       'invalid/missing-id.jsonl': `${JSON.stringify({ type: 'session', version: 3, timestamp, cwd: '/work/demo' })}\n`,
       'invalid/missing-timestamp.jsonl': `${JSON.stringify({ type: 'session', version: 3, id: 'missing-timestamp', cwd: '/work/demo' })}\n`,
       'invalid/wrong-version.jsonl': `${JSON.stringify({ type: 'session', version: '3', id: 'wrong-version', timestamp, cwd: '/work/demo' })}\n`,
@@ -186,12 +187,13 @@ describe('production session HTTP server security', () => {
     const payload = await response.json() as SessionListResponse
     const expected = [
       'plain.jsonl',
+      'parent/fork.jsonl',
       'project/run-notes/session.jsonl',
       'run-0/session.jsonl',
       'project/run-0/session.jsonl',
       '2026-10-18T10-00-00-000Z/session.jsonl',
-      'Subagents/standalone.jsonl',
-      'archive/agent_Transcript.jsonl',
+      'case-variants/Subagents/standalone.jsonl',
+      'case-variants/agent_Transcript.jsonl',
     ].sort()
 
     expect(response.status).toBe(200)

@@ -49,7 +49,7 @@ function isSessionCatalogPathMember(relativePath: string): boolean {
 }
 
 function isSessionCatalogMember(session: SessionListItem): boolean {
-  if (session.parentSession?.trim()) return false
+  // parentSession 同样用于 /fork 与 /clone，不能单凭父会话链接判定为子代理。
   if (session.id.toLowerCase().startsWith('subagent-')) return false
   return isSessionCatalogPathMember(session.relativePath)
 }
