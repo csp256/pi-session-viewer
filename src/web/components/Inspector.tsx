@@ -11,7 +11,7 @@ import {
   LocateFixed,
   X,
 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { formatClock, formatDateTime, formatDuration } from '../../core/format'
 import type { CapturedToolDefinition, SystemPromptComposition, TimelineEvent } from '../../core/types'
 import { parseSystemPromptSections } from '../../core/prompt-sections'
@@ -320,11 +320,7 @@ function EventRawView({ event }: { event: TimelineEvent }) {
 
 export function Inspector({ event, previousPrompt, mobileOpen, onClose, onJumpToEvent, onJumpToEntry }: InspectorProps) {
   const { t, localizeTitle } = useI18n()
-  const [tab, setTab] = useState<InspectorTab>('content')
-
-  useEffect(() => {
-    setTab('content')
-  }, [event?.id])
+  const [preferredTab, setTab] = useState<InspectorTab>('content')
 
   const tools = event?.toolDefinitions ?? []
   const isSystemPrompt = event?.kind === 'system-prompt'
@@ -334,6 +330,9 @@ export function Inspector({ event, previousPrompt, mobileOpen, onClose, onJumpTo
     && event?.title !== 'System prompt unrecorded'
   const hasComposition = hasResolvedSystemPrompt || (event?.kind !== 'tool-definitions' && Boolean(event?.systemPrompt?.composition))
   const isToolDef = event?.kind === 'tool-definitions'
+  // 仅当当前事件没有对应专用页签时临时回退，不覆盖用户选择。
+  const tab = (preferredTab === 'composition' && !hasComposition) || (preferredTab === 'diff' && !hasResolvedSystemPrompt)
+    ? 'content' : preferredTab
 
   return (
     <aside className={`inspector${mobileOpen ? ' is-mobile-open' : ''}`} aria-label={t.inspector.heading}>
