@@ -25,6 +25,8 @@ export const en = {
     openInspector: 'Open details',
     closeInspector: 'Close details',
     closeOverlay: 'Close overlay',
+    resizeSidebar: 'Resize session sidebar',
+    resizeInspector: 'Resize details sidebar',
     language: 'Language',
     switchToLight: 'Switch to light mode',
     switchToDark: 'Switch to dark mode',

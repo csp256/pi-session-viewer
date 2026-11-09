@@ -1,8 +1,10 @@
 import { AlertCircle, ArrowLeft, Bot, Clock3, Copy, Menu, Moon, PanelRightOpen, RefreshCw, Rows3, Sun, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
 import { fetchSession, fetchSessions, resolveSession } from './api'
 import { Inspector } from './components/Inspector'
 import { SessionSidebar } from './components/SessionSidebar'
+import { SidebarResizer } from './components/SidebarResizer'
+import { useSidebarWidths } from './sidebar-widths'
 import { Timeline, type TimelineHandle } from './components/Timeline'
 import { formatDateTime, formatDuration } from '../core/format'
 import { parseSessionJsonl } from '../core/session-parser'
@@ -99,6 +101,7 @@ function measurePerformance<T>(name: string, work: () => T): T {
 function App() {
   const { t, locale, setLocale } = useI18n()
   const { theme, toggleTheme } = useTheme()
+  const { widths, maximum, resize } = useSidebarWidths()
   const [accessToken] = useState<string | null>(() => browserAccessToken())
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [inspectorOpen, setInspectorOpen] = useState(false)
@@ -228,7 +231,10 @@ function App() {
   const title = sessionState.sessionTitle ?? t.header.selectSession
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" style={{
+      '--sidebar-width': `${widths.left}px`,
+      '--inspector-width': `${widths.right}px`,
+    } as CSSProperties}>
       <header className="app-header">
         <button className="icon-button mobile-only" type="button" onClick={() => { setInspectorOpen(false); setSidebarOpen(true) }} title={t.header.openSidebar} aria-label={t.header.openSidebar}>
           <Menu size={19} />
@@ -305,6 +311,8 @@ function App() {
       </header>
 
       <div className="workspace">
+        <SidebarResizer side="left" width={widths.left} maximum={maximum('left')} label={t.header.resizeSidebar} onResize={(width) => resize('left', width)} />
+        <SidebarResizer side="right" width={widths.right} maximum={maximum('right')} label={t.header.resizeInspector} onResize={(width) => resize('right', width)} />
         <div className={`sidebar-layer${sidebarOpen ? ' is-open' : ''}`}>
           <SessionSidebar
             projects={catalog.projects}
