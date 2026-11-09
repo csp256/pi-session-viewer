@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDownUp, BookOpen, Bot, Boxes, Brain, CheckCheck, CheckCircle2, ChevronDown, CircleUserRound, Cog, CornerDownRight, EyeOff, ScrollText, Square, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowDown, ArrowUp, BookOpen, Bot, Boxes, Brain, CheckCheck, CheckCircle2, ChevronDown, CircleUserRound, Cog, CornerDownRight, EyeOff, ScrollText, Square, Wrench, XCircle } from 'lucide-react'
 import { GroupedVirtuoso, type GroupedVirtuosoHandle, type GroupProps } from 'react-virtuoso'
 import { forwardRef, lazy, memo, Suspense, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { buildCausalLayout, causalLaneX, type CausalEventLayout } from '../../core/causal-layout'
@@ -701,10 +701,6 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
       </div>
 
       <div className="branch-bar">
-        <button className="timeline-order-toggle" type="button" aria-label={t.timeline.reverseOrder}
-          aria-pressed={order === 'newest-first'} onClick={toggleOrder}>
-          <ArrowDownUp size={14} />{order === 'oldest-first' ? t.timeline.oldestFirst : t.timeline.newestFirst}
-        </button>
         <label htmlFor="branch-select">{t.timeline.branchLabel}</label>
         <select id="branch-select" value={selectedLeafId ?? ''} onChange={(event) => onSelectBranch(event.target.value)}>
           {session.branches.map((branch) => (
@@ -713,6 +709,14 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
         </select>
         <span>{t.timeline.visibleEvents(visibleEventCount)}</span>
         {contextSummary ? <span className="context-summary">{contextSummary}</span> : null}
+        <button className="icon-button timeline-order-toggle" type="button" aria-label={t.timeline.reverseOrder}
+          title={`${order === 'oldest-first' ? t.timeline.oldestFirst : t.timeline.newestFirst} · ${t.timeline.reverseOrder}`}
+          aria-pressed={order === 'newest-first'} onClick={toggleOrder}>
+          <ArrowDown aria-hidden="true" size={14} strokeWidth={order === 'oldest-first' ? 3 : 1.75}
+            className={`timeline-order-arrow${order === 'oldest-first' ? ' is-active' : ''}`} data-direction="down" />
+          <ArrowUp aria-hidden="true" size={14} strokeWidth={order === 'newest-first' ? 3 : 1.75}
+            className={`timeline-order-arrow${order === 'newest-first' ? ' is-active' : ''}`} data-direction="up" />
+        </button>
       </div>
 
       {session.warnings.length > 0 && (

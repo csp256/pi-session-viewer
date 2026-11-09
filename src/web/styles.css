@@ -1086,6 +1086,7 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.2; }
 .event-read-button { display: inline-flex; align-items: center; justify-content: center; padding: 4px; margin-left: auto; border: 1px solid transparent; border-radius: 4px; color: var(--muted); background: transparent; cursor: pointer; }
 .event-read-button:hover, .event-read-button:focus-visible { color: var(--ink); background: var(--base); border-color: var(--line); }
 
-.timeline-order-toggle { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; color: var(--ink); background: var(--paper); font: inherit; cursor: pointer; }
-.timeline-order-toggle[aria-pressed="true"] { color: light-dark(#246b83, var(--blue)); }
+.timeline-order-toggle { display: inline-flex; align-items: center; justify-content: center; gap: 0; flex: 0 0 32px; width: 32px; height: 26px; border-radius: 4px; }
+.timeline-order-arrow { color: var(--muted); opacity: .45; }
+.timeline-order-arrow.is-active { color: light-dark(#246b83, var(--blue)); opacity: 1; }
 @media (max-width: 600px) { .branch-bar { flex-wrap: wrap; } }
