@@ -42,6 +42,9 @@ The current presentation of one Session on a selected branch. Event-kind filters
 A derived, branch-specific transport/cache of a Session View for a large Session. It contains the complete event order, summaries, original content lengths and context marks, without duplicating large event bodies or raw records. Deferred content and Raw are read from the original Session on demand. A saved snapshot may appear while appended entries refresh in the background; it never changes the source Session.
 _Avoid_: partial session, truncated session, compacted history
 
+**Live Updates（实时更新）**:
+An optional mode following the open Session View, not the Session Catalog. Visible pages check for changes without overlapping requests; unchanged files need only metadata checks. Complete appended records produce event/turn deltas. History-reading position and selection remain stable; the newest edge follows new events. Hidden pages pause, failures back off, and inactive server-side parse caches expire. Raw Session files remain read-only.
+
 ## Prompts and context projections
 
 **Prompt Format**:

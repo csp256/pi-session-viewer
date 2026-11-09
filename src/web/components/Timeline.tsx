@@ -28,7 +28,7 @@ interface TimelineProps {
   turns: TimelineTurn[]
   allEvents: TimelineEvent[]
   selectedEventId: string | null
-  restorePosition?: { eventId: string | null; scrollTop?: number; anchor?: TimelineAnchor; revealEventKind?: boolean; key: number } | null
+  restorePosition?: { followNewest?: boolean; eventId: string | null; scrollTop?: number; anchor?: TimelineAnchor; revealEventKind?: boolean; key: number } | null
   selectedLeafId: string | null
   contextProjection?: ContextProjection
   enabledKinds: ReadonlySet<EventKind>
@@ -47,6 +47,7 @@ export interface TimelineAnchor {
 }
 
 export interface TimelineViewport {
+  atNewest?: boolean
   scrollTop: number
   anchor: TimelineAnchor | null
 }
@@ -462,12 +463,13 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
     const eventId = firstVisible?.dataset.eventId
 
     return {
+      atNewest: order === 'newest-first' ? container.scrollTop <= 32 : container.scrollHeight - container.clientHeight - container.scrollTop <= 32,
       scrollTop: container.scrollTop,
       anchor: eventId && firstVisible
         ? { eventId, offset: firstVisible.getBoundingClientRect().top - viewportTop }
         : null,
     }
-  }, [])
+  }, [order])
 
   useImperativeHandle(ref, () => ({ getViewport }), [getViewport])
 
@@ -591,7 +593,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
     }
 
     const index = targetEventId ? eventIndexById.get(targetEventId) : undefined
-    if (restorePosition.scrollTop == null && index == null) {
+    if (restorePosition.scrollTop == null && index == null && !restorePosition.followNewest) {
       const acknowledgement = requestAnimationFrame(() => onRestorePositionApplied(restorePosition.key))
       return () => cancelAnimationFrame(acknowledgement)
     }
@@ -610,7 +612,13 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
         return
       }
 
-      if (anchor && index != null) {
+      if (restorePosition.followNewest) {
+        virtuoso.scrollToIndex({ index: order === 'newest-first' ? 0 : Math.max(0, timelineItems.length - 1),
+          align: order === 'newest-first' ? 'start' : 'end', behavior: 'auto' })
+        attempts += 1
+        if (attempts < 12) frame = requestAnimationFrame(restoreWhenReady)
+        else onRestorePositionApplied(restorePosition.key)
+      } else if (anchor && index != null) {
         virtuoso.scrollToIndex({ index, align: 'start', behavior: 'auto' })
 
         let frameCount = 0

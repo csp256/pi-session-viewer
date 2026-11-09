@@ -34,6 +34,7 @@ Pi loads the backend through a TypeScript entry so `/reload` picks up backend ch
 
 ## Key Features
 
+- **Optional Live updates**: Enable **Live** beside Refresh to follow the open session. Visible tabs check every two seconds without overlapping requests; unchanged checks read no session content. Only appended, complete JSONL records are read and changed events are transmitted. Live pauses in hidden tabs, retries with backoff, preserves history-reading position, and follows new entries when already at the newest edge. It does not rescan the Session Catalog.
 - **Large sessions**: A persistent lightweight timeline index avoids repeatedly loading the entire JSONL. Large entry bodies and original Raw records load on demand; full conversation text remains available. Saved timelines appear first while appended entries refresh in the background. The first index build takes longer; superseded requests are cancelled.
 - **Timeline order**: Use the highlighted down/up arrows beside the central pane’s counts to toggle oldest-first / newest-first. The choice is remembered; selection and filters stay unchanged.
 - **Reading view**: Double-click a timeline event for a large, scrollable Markdown/text modal. Use the book button or Shift+Enter as alternatives; switch to source text when needed. Close with Escape, the close button, or the backdrop.

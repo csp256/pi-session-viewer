@@ -1,4 +1,4 @@
-import type { ContextProjection, RawObject, SessionFileResponse, SessionListResponse } from '../core/types'
+import type { ContextProjection, LiveSessionResponse, RawObject, SessionFileResponse, SessionListResponse } from '../core/types'
 
 const PANEL_UNAVAILABLE_ERROR = 'Viewer server is unavailable or Pi has exited. Run /session-viewer on again from Pi.'
 
@@ -85,4 +85,13 @@ export async function fetchEventContent(token: string, entryId: string, eventId:
     signal, cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}` },
   }))
   return result.content
+}
+
+
+export async function fetchLiveSession(token: string, accessToken: string, signal: AbortSignal, leaf?: string, cursor?: string): Promise<LiveSessionResponse | null> {
+  const params = new URLSearchParams({ session: token })
+  if (leaf) params.set('leaf', leaf)
+  if (cursor) params.set('cursor', cursor)
+  const response = await request(`/api/live?${params}`, { signal, cache: 'no-store', headers: { Authorization: `Bearer ${accessToken}` } })
+  return response.status === 304 ? null : readJson(response)
 }

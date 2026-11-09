@@ -204,6 +204,15 @@ export const zhCN: Translations = {
       sourceLabel: '来源',
     },
   },
+  live: {
+    label: '实时',
+    toggle: '实时更新',
+    off: '启用当前会话的实时更新',
+    starting: '正在准备实时更新…',
+    watching: '已启用实时更新，点击暂停',
+    paused: '页面隐藏或加载时暂停实时更新',
+    retrying: '实时更新暂时中断，正在自动重试',
+  },
   overview: {
     updatingSnapshot: '已显示保存的时间线，正在更新最新记录…',
     failedToOpen: '无法打开会话',

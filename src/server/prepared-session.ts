@@ -5,7 +5,7 @@ import { gzip } from 'node:zlib'
 import { promisify } from 'node:util'
 import { buildSessionView } from '../core/session-view'
 import { getSessionTitle, parseSessionJsonl } from '../core/session-parser'
-import type { CapturedToolDefinition, SessionFileResponse, TimelineEvent } from '../core/types'
+import type { CapturedToolDefinition, ParsedSession, PreparedSessionView, SessionFileResponse, SessionView, TimelineEvent } from '../core/types'
 import { computeContextProjections } from './context-projection'
 import { readCompactSession, readOriginalEntry } from './session-content'
 import { sessionNameCacheDirectory } from './session-name-index'
@@ -54,32 +54,9 @@ export async function preparedSessionBody(absolute: string, relative: string, to
     const leafId = requestedLeaf && parsed.branches.some((branch) => branch.leafId === requestedLeaf)
       ? requestedLeaf : parsed.currentLeafId
     const view = buildSessionView(parsed, leafId, leafId ? projections?.[leafId] : undefined)
-    const definitions: CapturedToolDefinition[] = []
-    const definitionIds = new Map<CapturedToolDefinition, number>()
-    const events = view.events.map((event): TimelineEvent => {
-      const { raw: _raw, toolDefinition, ...metadata } = event
-      const defer = event.content.length > 256 && event.kind !== 'system-prompt' && event.kind !== 'tool-definitions'
-        && event.kind !== 'user' && event.kind !== 'assistant' && event.kind !== 'thinking' && !event.contextEdit
-      let toolDefinitionRef: number | undefined
-      if (toolDefinition) {
-        toolDefinitionRef = definitionIds.get(toolDefinition)
-        if (toolDefinitionRef === undefined) {
-          toolDefinitionRef = definitions.length
-          definitions.push(toolDefinition)
-          definitionIds.set(toolDefinition, toolDefinitionRef)
-        }
-      }
-      return { ...metadata, raw: {}, content: defer ? '' : event.content, contentLength: event.content.length,
-        ...(defer ? { contentDeferred: true } : {}), ...(toolDefinitionRef !== undefined ? { toolDefinitionRef } : {}) }
-    })
     const payload: SessionFileResponse = {
       token, relativePath: relative, modifiedAt: stat.mtime.toISOString(), content: '', contextProjections: projections,
-      prepared: {
-        parsed: { ...parsed, entries: parsed.entries.filter((entry) => entry.type === 'session_info').slice(-1),
-          displayTitle: getSessionTitle(parsed), rawEntriesDeferred: true },
-        leafId, events, definitions, stats: view.stats,
-        turns: view.turns.map(({ events: turnEvents, ...turn }) => ({ ...turn, eventIds: turnEvents.map((event) => event.id) })),
-      },
+      prepared: prepareSessionView(parsed, view, leafId),
     }
     const body = await zip(JSON.stringify(payload), { level: 1 })
     // 索引是可丢弃的本地缓存，写入失败不影响本次读取。
@@ -105,4 +82,32 @@ export async function readEventContent(absolute: string, relative: string, entry
   const header = { type: 'session', version: 3, id: 'entry-preview', timestamp: '1970-01-01T00:00:00Z', cwd: '' }
   const parsed = parseSessionJsonl(`${JSON.stringify(header)}\n${JSON.stringify(raw)}`, relative)
   return buildSessionView(parsed).events.find((event) => event.id === eventId)?.content
+}
+
+
+export function prepareSessionView(parsed: ParsedSession, view: SessionView, leafId: string | null): PreparedSessionView {
+  const definitions: CapturedToolDefinition[] = []
+  const definitionIds = new Map<CapturedToolDefinition, number>()
+  const events = view.events.map((event): TimelineEvent => {
+    const { raw: _raw, toolDefinition, ...metadata } = event
+    const defer = event.content.length > 256 && event.kind !== 'system-prompt' && event.kind !== 'tool-definitions'
+      && event.kind !== 'user' && event.kind !== 'assistant' && event.kind !== 'thinking' && !event.contextEdit
+    let toolDefinitionRef: number | undefined
+    if (toolDefinition) {
+      toolDefinitionRef = definitionIds.get(toolDefinition)
+      if (toolDefinitionRef === undefined) {
+        toolDefinitionRef = definitions.length
+        definitions.push(toolDefinition)
+        definitionIds.set(toolDefinition, toolDefinitionRef)
+      }
+    }
+    return { ...metadata, raw: {}, content: defer ? '' : event.content, contentLength: event.content.length,
+      ...(defer ? { contentDeferred: true } : {}), ...(toolDefinitionRef !== undefined ? { toolDefinitionRef } : {}) }
+  })
+  return {
+    parsed: { ...parsed, entries: parsed.entries.filter((entry) => entry.type === 'session_info').slice(-1),
+      displayTitle: getSessionTitle(parsed), rawEntriesDeferred: true },
+    leafId, events, definitions, stats: view.stats,
+    turns: view.turns.map(({ events: turnEvents, ...turn }) => ({ ...turn, eventIds: turnEvents.map((event) => event.id) })),
+  }
 }

@@ -203,6 +203,15 @@ export const en = {
       sourceLabel: 'Source',
     },
   },
+  live: {
+    label: 'Live',
+    toggle: 'Live updates',
+    off: 'Enable live updates for the open session',
+    starting: 'Starting live updates…',
+    watching: 'Live updates enabled — click to pause',
+    paused: 'Live updates paused while the page is hidden or loading',
+    retrying: 'Live updates interrupted — retrying automatically',
+  },
   overview: {
     updatingSnapshot: 'Showing saved timeline; updating recent entries…',
     failedToOpen: 'Failed to open session',
