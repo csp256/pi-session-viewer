@@ -19,6 +19,8 @@ import { getToolProvenanceLabel, resolveToolProvenance, sanitizeToolForApi } fro
 import { PromptDiffView } from './PromptDiffView'
 import { useI18n } from '../i18n'
 import { useEventContent, type EventContentLoader } from '../event-content'
+import { readableText } from '../readable-text'
+import { ReadableMarkdown } from './ReadableMarkdown'
 
 interface InspectorProps {
   loadContent?: EventContentLoader
@@ -263,8 +265,9 @@ function EventOverview({ event }: { event: TimelineEvent }) {
 
 function EventContentView({ event, onJumpToEntry }: { event: TimelineEvent; onJumpToEntry?: (entryId: string) => void }) {
   const { t } = useI18n()
-  const content = event.content ?? ''
-  const totalChars = content.length
+  const content = readableText(event.content ?? '')
+  const totalChars = event.content?.length ?? 0
+  const markdown = ['user', 'assistant', 'thinking'].includes(event.kind)
 
   return (
     <div className="content-view">
@@ -293,7 +296,7 @@ function EventContentView({ event, onJumpToEntry }: { event: TimelineEvent; onJu
       <div
         className={`content-body-wrap event--${event.kind}${event.isError ? ' is-error' : ''}`}
       >
-        <pre>{content || t.inspector.views.noContent}</pre>
+        {markdown && content ? <div className="inspector-markdown"><ReadableMarkdown>{content}</ReadableMarkdown></div> : <pre>{content || t.inspector.views.noContent}</pre>}
       </div>
     </div>
   )

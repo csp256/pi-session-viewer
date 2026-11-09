@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test'
 const timestamp = '2026-01-01T10:00:00.000Z'
 const markdown = '# Reading example\n\nA **bold** sentence with `inline code`.\n\n```python\nprint("readable")\n```\n\n| Name | Value |\n| --- | --- |\n| One | Two |\n\n[Safe link](https://example.com)\n\n[Unsafe](javascript:alert(1))\n\n![Remote image](https://reader-test.invalid/tracker.png)\n\n<script>window.__readerExecuted = true</script>\n\n' + Array.from({ length: 100 }, (_, i) => `Paragraph ${i}: Full content stays available in the reading view.`).join('\n\n') + '\n\nEND OF FULL MESSAGE'
 const toolText = '# literal output\n  indentation stays\n<unsafe>not HTML</unsafe>'
+const thinking = '\x1b[38;2;167;152;215mThinking:\x1b[39m [38;2;150;160;164m**Checking borrow_objects support**[39m'
 
 test.beforeEach(async ({ page }) => {
   await page.route('**/api/sessions', (route) => route.fulfill({ json: {
@@ -15,7 +16,7 @@ test.beforeEach(async ({ page }) => {
     content: [
       { type: 'session', version: 3, id: 'reader', timestamp, cwd: '/work/demo' },
       { type: 'message', id: 'u1', parentId: null, timestamp, message: { role: 'user', content: 'Please explain the example.' } },
-      { type: 'message', id: 'a1', parentId: 'u1', timestamp, message: { role: 'assistant', content: [{ type: 'text', text: markdown }, { type: 'toolCall', id: 'call1', name: 'bash', arguments: { command: 'echo example' } }] } },
+      { type: 'message', id: 'a1', parentId: 'u1', timestamp, message: { role: 'assistant', content: [{ type: 'thinking', thinking }, { type: 'text', text: markdown }, { type: 'toolCall', id: 'call1', name: 'bash', arguments: { command: 'echo example' } }] } },
       { type: 'message', id: 'r1', parentId: 'a1', timestamp, message: { role: 'toolResult', toolCallId: 'call1', toolName: 'bash', content: [{ type: 'text', text: toolText }], isError: false } },
     ].map((entry) => JSON.stringify(entry)).join('\n'),
   } }))
@@ -108,4 +109,27 @@ test('阅读弹窗跟随界面语言', async ({ page }) => {
   await expect(modal.getByRole('button', { name: '渲染 Markdown' })).toBeVisible()
   await modal.getByRole('button', { name: '关闭', exact: true }).click()
   await expect(modal).toHaveCount(0)
+})
+
+test('Thinking 的时间线、详情与阅读弹窗清除终端颜色码并渲染 Markdown，Raw 保留原文', async ({ page }) => {
+  await page.getByRole('checkbox', { name: 'Thinking', exact: true }).check()
+  const row = page.locator('.event-row.event--thinking')
+  await expect(row).toContainText('Checking borrow_objects support')
+  await expect(row).not.toContainText('[38;')
+  await expect(row).not.toContainText('[39m')
+  await row.click()
+  await page.getByRole('tab', { name: 'Content', exact: true }).click()
+  const content = page.locator('.inspector-markdown')
+  await expect(content.locator('strong')).toHaveText('Checking borrow_objects support')
+  await expect(content).not.toContainText('[38;')
+  await expect(content).not.toContainText('[39m')
+  await page.getByRole('tab', { name: 'Raw', exact: true }).click()
+  await expect(page.locator('.raw-view')).toContainText('[38;2;167;152;215m')
+  await row.dblclick()
+  const modal = page.getByRole('dialog')
+  await expect(modal.locator('strong')).toHaveText('Checking borrow_objects support')
+  await expect(modal).not.toContainText('[38;')
+  await expect(modal).not.toContainText('[39m')
+  await modal.getByRole('button', { name: 'Show source' }).click()
+  await expect(modal.locator('.event-reader-source')).toHaveText('Thinking: **Checking borrow_objects support**')
 })
