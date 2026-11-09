@@ -17,6 +17,7 @@ export default defineConfig({
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
   webServer: {
+    env: { PI_SESSION_VIEWER_CACHE_DIR: 'test-results/session-name-index' },
     command: `PORT=${testPort} PI_SESSION_VIEWER_DEV_TOKEN=dev-token PI_CODING_AGENT_SESSION_DIR=tests/fixtures/sessions npm run dev`,
     url: `http://127.0.0.1:${testPort}`,
     reuseExistingServer: false,
