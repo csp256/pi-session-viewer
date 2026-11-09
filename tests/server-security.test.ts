@@ -446,3 +446,33 @@ describe('production session HTTP server security', () => {
     expect(response.status).toBe(404)
   })
 })
+
+it('轻量传输不丢失 Raw，延后投影遵守鉴权、文件边界与版本', async () => {
+  const raw = { type: 'message', id: 'signed', parentId: null, timestamp: '2026-01-01T00:00:01Z', message: {
+    role: 'assistant', content: [{ type: 'thinking', thinking: 'Readable text', thinkingSignature: 'provider-secret-signature' }],
+  } }
+  const content = piSessionHeader('compact', '2026-01-01T00:00:00Z', '/work') + '\n' + JSON.stringify(raw) + '\n'
+  const server = await createServerWithSessions({ 'compact.jsonl': content })
+  const token = encodeSessionToken('compact.jsonl')
+  const headers = { Authorization: `Bearer ${server.token}` }
+  const compact = await fetch(`${server.url}/api/sessions/${token}`, { headers: { ...headers, 'X-Pi-Viewer-Compact': '1' } }).then((response) => response.json())
+  expect(compact.content).toContain('Readable text')
+  expect(compact.content).not.toContain('provider-secret-signature')
+  expect(compact.deferredRawEntryIds).toEqual(['signed'])
+  expect(compact.contextDeferred).toBe(true)
+  const full = await fetch(`${server.url}/api/sessions/${token}`, { headers }).then((response) => response.json())
+  expect(full.content).toBe(content)
+  const entryUrl = `${server.url}/api/entry?session=${token}&id=signed`
+  expect((await fetch(entryUrl)).status).toBe(401)
+  expect(await fetch(entryUrl, { headers }).then((response) => response.json())).toEqual(raw)
+  expect((await fetch(`${server.url}/api/entry?session=${encodeSessionToken('../outside.jsonl')}&id=signed`, { headers })).status).toBe(404)
+  expect((await fetch(`${server.url}/api/entry?session=${token}&id=missing`, { headers })).status).toBe(404)
+  const contentUrl = `${server.url}/api/content?session=${token}&entry=signed&event=${encodeURIComponent('signed:thinking:0')}`
+  expect((await fetch(contentUrl)).status).toBe(401)
+  expect(await fetch(contentUrl, { headers }).then((response) => response.json())).toEqual({ content: 'Readable text' })
+  expect((await fetch(`${server.url}/api/content?session=${encodeSessionToken('../outside.jsonl')}&entry=signed&event=signed`, { headers })).status).toBe(404)
+  expect((await fetch(`${server.url}/api/context?session=${token}`)).status).toBe(401)
+  const context = await fetch(`${server.url}/api/context?session=${token}&modifiedAt=${encodeURIComponent(compact.modifiedAt)}`, { headers }).then((response) => response.json())
+  expect(context).toEqual(full.contextProjections)
+  expect((await fetch(`${server.url}/api/context?session=${token}&modifiedAt=old-version`, { headers })).status).toBe(409)
+})

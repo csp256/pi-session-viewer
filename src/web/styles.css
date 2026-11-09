@@ -1101,3 +1101,4 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.2; }
 .timeline-order-arrow { color: var(--muted); opacity: .45; }
 .timeline-order-arrow.is-active { color: light-dark(#246b83, var(--blue)); opacity: 1; }
 @media (max-width: 600px) { .branch-bar { flex-wrap: wrap; } }
+.session-update-status { flex: 0 0 auto; padding: 5px 18px; color: var(--muted); background: var(--paper); border-bottom: 1px solid var(--line-soft); font-size: 11px; }

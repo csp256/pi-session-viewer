@@ -38,6 +38,10 @@ The visible timeline event currently targeted by keyboard navigation. It may dif
 **Session View**:
 The current presentation of one Session on a selected branch. Event-kind filters determine its Visible events, while the Selected event drives the Inspector and the Focused event remains independent.
 
+**Prepared Session View（预构建会话视图）**:
+A derived, branch-specific transport/cache of a Session View for a large Session. It contains the complete event order, summaries, original content lengths and context marks, without duplicating large event bodies or raw records. Deferred content and Raw are read from the original Session on demand. A saved snapshot may appear while appended entries refresh in the background; it never changes the source Session.
+_Avoid_: partial session, truncated session, compacted history
+
 ## Prompts and context projections
 
 **Prompt Format**:

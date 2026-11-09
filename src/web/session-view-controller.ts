@@ -120,8 +120,9 @@ export type SessionViewIntent<FileHandle = unknown> =
   | { type: 'dismiss-action-error' }
 
 export interface SessionViewControllerDependencies<FileHandle = unknown> {
-  readServerSession(token: string): Promise<SessionFileResponse>
-  resolveSubagent(targetFile: string, parentRelative?: string): Promise<SessionFileResponse>
+  readContext?(token: string, signal?: AbortSignal, modifiedAt?: string): Promise<Record<string, ContextProjection> | null>
+  readServerSession(token: string, signal?: AbortSignal, leafId?: string, fresh?: boolean, afterVersion?: string): Promise<SessionFileResponse>
+  resolveSubagent(targetFile: string, parentRelative?: string, signal?: AbortSignal): Promise<SessionFileResponse>
   readImportedFile(source: ImportedSessionSource<FileHandle>): Promise<string>
   refreshCatalog(): Promise<SessionListResponse | null>
   cache: SessionCache
@@ -161,6 +162,21 @@ function requirePiSession(parsed: ParsedSession): ParsedSession {
 
 function parsePiSession(parseSession: SessionParser, content: string, sourceName: string): ParsedSession {
   return requirePiSession(parseSession(content, sourceName))
+}
+
+function parseServerSession(parseSession: SessionParser, payload: SessionFileResponse): ParsedSession {
+  if (payload.prepared) {
+    const prepared = payload.prepared
+    const events = prepared.events.map((event) => ({ ...event,
+      ...(event.toolDefinitionRef !== undefined ? { toolDefinition: prepared.definitions[event.toolDefinitionRef] } : {}) }))
+    const byId = new Map(events.map((event) => [event.id, event]))
+    const view: SessionView = { events, stats: prepared.stats, branchEntries: [],
+      turns: prepared.turns.map(({ eventIds, ...turn }) => ({ ...turn, events: eventIds.map((id) => byId.get(id)!).filter(Boolean) })) }
+    return requirePiSession({ ...prepared.parsed, preparedRefreshNeeded: payload.preparedRefreshNeeded, preparedViews: prepared.leafId ? { [prepared.leafId]: view } : {},
+      preparedBytes: prepared.events.length * 600 + prepared.definitions.length * 4096 })
+  }
+  const parsed = parsePiSession(parseSession, payload.content, payload.relativePath)
+  return { ...parsed, deferredRawEntryIds: payload.deferredRawEntryIds, contextDeferred: payload.contextDeferred }
 }
 
 function enableEventKind(enabledKinds: ReadonlySet<EventKind>, kind: EventKind): ReadonlySet<EventKind> {
@@ -288,7 +304,11 @@ function deriveSnapshot<FileHandle>(
 export function createSessionViewController<FileHandle = unknown>(
   dependencies: SessionViewControllerDependencies<FileHandle>,
 ): SessionViewController<FileHandle> {
-  const buildView = dependencies.buildView ?? buildSessionView
+  const originalBuildView = dependencies.buildView ?? buildSessionView
+  const buildView: typeof buildSessionView = (parsed, leafId, projection) => {
+    const prepared = parsed.preparedViews?.[leafId ?? parsed.currentLeafId ?? '']
+    return prepared ?? originalBuildView(parsed, leafId, projection)
+  }
   let snapshot: SessionViewSnapshot<FileHandle> = deriveSnapshot({
     active: null,
     view: null,
@@ -332,7 +352,10 @@ export function createSessionViewController<FileHandle = unknown>(
     publish({ ...snapshot, ...changes })
   }
 
+  let pendingRequest = new AbortController()
   const beginSessionChange = (): number => {
+    pendingRequest.abort()
+    pendingRequest = new AbortController()
     const sequence = ++latestSessionChange
     update({ loading: true, loadError: null, actionError: null })
     return sequence
@@ -392,10 +415,25 @@ export function createSessionViewController<FileHandle = unknown>(
       loadError: null,
       actionError: null,
     })
+    void loadDeferredContext(active, latestSessionChange, pendingRequest.signal)
+  }
+
+  const loadDeferredContext = async (active: ActiveSessionView<FileHandle>, sequence: number, signal: AbortSignal) => {
+    if (!active.token || !active.parsed.contextDeferred || active.contextProjections || !dependencies.readContext) return
+    try {
+      const projections = await dependencies.readContext(active.token, signal, active.source.kind === 'server' ? active.source.modifiedAt : undefined)
+      if (!projections || !isLatest(sequence) || snapshot.active?.parsed !== active.parsed) return
+      const nextActive = { ...active, contextProjections: projections }
+      const selected = reconcile(active.parsed, projections, snapshot.selectedLeafId, snapshot.selectedEventId, buildView)
+      const cached = dependencies.cache.recallByToken(active.token)
+      if (cached?.parsed === active.parsed) dependencies.cache.remember(sessionCacheKey(cached.token, cached.modifiedAt), { ...cached, contextProjections: projections })
+      publish({ ...snapshot, active: nextActive, ...selected })
+    } catch { /* 上下文暂不可用时保留正文，不以猜测代替 Pi 的投影。 */ }
   }
 
   const dispatchOpen = async (session: SessionListItem) => {
     const sequence = beginSessionChange()
+    const signal = pendingRequest.signal
     try {
       const key = sessionCacheKey(session.token, session.modifiedAt)
       const cached = dependencies.cache.recall(key)
@@ -403,9 +441,9 @@ export function createSessionViewController<FileHandle = unknown>(
       if (cached) {
         active = cachedSession(session.token, session.modifiedAt, cached, session)
       } else {
-        const payload = await dependencies.readServerSession(session.token)
+        const payload = await dependencies.readServerSession(session.token, signal)
         if (!isLatest(sequence)) return
-        const parsed = parsePiSession(dependencies.parseSession, payload.content, payload.relativePath)
+        const parsed = parseServerSession(dependencies.parseSession, payload)
         const contextProjections = payload.contextProjections ?? null
         const metadata = { ...session, modifiedAt: payload.modifiedAt, relativePath: payload.relativePath }
         active = {
@@ -509,6 +547,7 @@ export function createSessionViewController<FileHandle = unknown>(
 
   const dispatchRefresh = async (viewport?: SessionViewViewport | null) => {
     const sequence = beginSessionChange()
+    const signal = pendingRequest.signal
     const activeAtStart = snapshot.active
     update({ catalog: { ...snapshot.catalog, loading: true } })
 
@@ -560,14 +599,16 @@ export function createSessionViewController<FileHandle = unknown>(
       applyCatalog(catalog, catalogError)
 
       const listedMetadata = catalog ? snapshot.catalog.sessions.find((item) => item.token === serverSource.token) : undefined
-      if (listedMetadata && listedMetadata.modifiedAt === serverSource.modifiedAt) {
-        publish({ ...snapshot, active: { ...activeAtStart, metadata: listedMetadata }, loading: false, loadError: null })
+      if (listedMetadata && listedMetadata.modifiedAt === serverSource.modifiedAt && !activeAtStart.parsed.preparedRefreshNeeded) {
+        const active = { ...activeAtStart, metadata: listedMetadata }
+        publish({ ...snapshot, active, loading: false, loadError: null })
+        void loadDeferredContext(active, sequence, signal)
         return
       }
 
-      const payload = await dependencies.readServerSession(serverSource.token)
+      const payload = await dependencies.readServerSession(serverSource.token, signal, activeAtStart.parsed.preparedViews && snapshot.selectedLeafId !== activeAtStart.parsed.currentLeafId ? snapshot.selectedLeafId ?? undefined : undefined, true, activeAtStart.parsed.preparedRefreshNeeded ? serverSource.modifiedAt : undefined)
       if (!isLatest(sequence)) return
-      const parsed = parsePiSession(dependencies.parseSession, payload.content, payload.relativePath)
+      const parsed = parseServerSession(dependencies.parseSession, payload)
       const contextProjections = payload.contextProjections ?? null
       const metadata = {
         ...(listedMetadata ?? activeAtStart.metadata!),
@@ -587,7 +628,10 @@ export function createSessionViewController<FileHandle = unknown>(
       commit(active, selected.selectedLeafId, selected.selectedEventId, restoreIntent)
     } catch (error) {
       if (!isLatest(sequence)) return
-      update({ loading: false, loadError: isControllerError(error) ? error : failed() })
+      if (activeAtStart.parsed.preparedRefreshNeeded) {
+        update({ active: { ...activeAtStart, parsed: { ...activeAtStart.parsed, preparedRefreshNeeded: false } },
+          loading: false, loadError: null, actionError: failed() })
+      } else update({ loading: false, loadError: isControllerError(error) ? error : failed() })
     }
   }
 
@@ -599,6 +643,7 @@ export function createSessionViewController<FileHandle = unknown>(
     const parent = snapshot.active
     if (!parent) return
     const sequence = beginSessionChange()
+    const signal = pendingRequest.signal
     const parentFrame = createFrame(snapshot, viewport, sourceEventId)
 
     try {
@@ -617,12 +662,12 @@ export function createSessionViewController<FileHandle = unknown>(
         parsed = cached.parsed
         contextProjections = cached.contextProjections
       } else {
-        const payload = await dependencies.resolveSubagent(reference.targetFile, parentRelative)
+        const payload = await dependencies.resolveSubagent(reference.targetFile, parentRelative, signal)
         if (!isLatest(sequence)) return
         token = payload.token
         relativePath = payload.relativePath
         modifiedAt = payload.modifiedAt
-        parsed = parsePiSession(dependencies.parseSession, payload.content, payload.relativePath)
+        parsed = parseServerSession(dependencies.parseSession, payload)
         contextProjections = payload.contextProjections ?? null
         rememberSession(
           dependencies.cache,
@@ -682,6 +727,7 @@ export function createSessionViewController<FileHandle = unknown>(
   const dispatchReturn = async (targetIndex?: number, viewport?: SessionViewViewport | null) => {
     if (!snapshot.navigation.length) return
     const sequence = beginSessionChange()
+    const signal = pendingRequest.signal
     const current = snapshot.active
     if (current?.token && viewport) {
       rememberViewport(current.token, {
@@ -713,9 +759,9 @@ export function createSessionViewController<FileHandle = unknown>(
           parsed = cached.parsed
           contextProjections = cached.contextProjections
         } else {
-          const payload = await dependencies.readServerSession(frame.source.token)
+          const payload = await dependencies.readServerSession(frame.source.token, signal)
           if (!isLatest(sequence)) return
-          parsed = parsePiSession(dependencies.parseSession, payload.content, payload.relativePath)
+          parsed = parseServerSession(dependencies.parseSession, payload)
           contextProjections = payload.contextProjections ?? null
           metadata = metadata ? { ...metadata, modifiedAt: payload.modifiedAt, relativePath: payload.relativePath } : null
           source = { kind: 'server', token: frame.source.token, modifiedAt: payload.modifiedAt }
@@ -793,6 +839,20 @@ export function createSessionViewController<FileHandle = unknown>(
       case 'select-branch': {
         const active = snapshot.active
         if (!active || !active.parsed.branches.some((branch) => branch.leafId === intent.leafId)) return
+        if (active.token && active.parsed.preparedViews && !active.parsed.preparedViews[intent.leafId]) {
+          const sequence = beginSessionChange()
+          try {
+            const payload = await dependencies.readServerSession(active.token, pendingRequest.signal, intent.leafId)
+            if (!isLatest(sequence)) return
+            const parsed = parseServerSession(dependencies.parseSession, payload)
+            const preparedViews = { ...Object.fromEntries(Object.entries(active.parsed.preparedViews).slice(-1)), ...parsed.preparedViews }
+            const merged = { ...parsed, preparedViews, preparedBytes: Object.values(preparedViews).reduce((total, view) => total + view.events.length * 600, 0) }
+            const nextActive = { ...active, parsed: merged, contextProjections: payload.contextProjections ?? null }
+            rememberSession(dependencies.cache, active.token, payload.modifiedAt, payload.content, merged, nextActive.contextProjections)
+            commit(nextActive, intent.leafId, snapshot.selectedEventId, makeRestore(null, 0))
+          } catch (error) { if (isLatest(sequence)) update({ loading: false, loadError: isControllerError(error) ? error : failed() }) }
+          return
+        }
         const selected = activeView(active.parsed, active.contextProjections, intent.leafId, buildView)
         const currentEvent = selected.view.events.some((event) => event.id === snapshot.selectedEventId)
           ? snapshot.selectedEventId

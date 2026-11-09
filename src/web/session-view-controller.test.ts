@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { defaultEventKinds } from '../core/event-kinds'
 import { parseSessionJsonl } from '../core/session-parser'
 import { decodeSessionToken, encodeSessionToken } from '../core/session-token'
-import type { SessionFileResponse, SessionListItem, SessionListResponse } from '../core/types'
+import type { ContextProjection, SessionFileResponse, SessionListItem, SessionListResponse } from '../core/types'
 import { createSessionCache, sessionCacheKey } from './session-cache'
 import { createSessionViewController, type SessionViewController } from './session-view-controller'
 
@@ -68,10 +68,11 @@ function deferred<T>() {
 }
 
 function createController(
-  readServerSession: (token: string) => Promise<SessionFileResponse>,
+  readServerSession: (token: string, signal?: AbortSignal, leafId?: string, fresh?: boolean, afterVersion?: string) => Promise<SessionFileResponse>,
   options: {
     resolveSubagent?: (targetFile: string, parentRelative?: string) => Promise<SessionFileResponse>
     cache?: ReturnType<typeof createSessionCache>
+    readContext?: (token: string, signal?: AbortSignal) => Promise<Record<string, ContextProjection> | null>
     readImportedFile?: (file: unknown) => Promise<string>
     refreshCatalog?: () => Promise<SessionListResponse | null>
     parseSession?: typeof parseSessionJsonl
@@ -81,6 +82,7 @@ function createController(
 ): SessionViewController<unknown> {
   return createSessionViewController<unknown>({
     readServerSession,
+    readContext: options.readContext,
     resolveSubagent: options.resolveSubagent ?? (async (targetFile) => readServerSession(encodeSessionToken(targetFile))),
     readImportedFile: async (source) => options.readImportedFile
       ? options.readImportedFile(source.file)
@@ -659,4 +661,70 @@ describe('Session View controller', () => {
     expect(refreshCatalog).toHaveBeenCalledTimes(1)
     expect(controller.getSnapshot().active?.token).toBe('s1')
   })
+})
+
+
+it('正文先显示，投影延后补齐且不重置用户选择与筛选，并更新缓存', async () => {
+  const later = deferred<Record<string, ContextProjection> | null>()
+  const read = vi.fn(async (token: string) => ({ ...payload(token, content(token)), ...(token === 'alpha' ? { contextDeferred: true, deferredRawEntryIds: ['user-1'] } : {}) }))
+  const readContext = vi.fn(() => later.promise)
+  const controller = createController(read, { readContext })
+  await controller.dispatch({ type: 'open', session: session('alpha') })
+  expect(controller.getSnapshot().loading).toBe(false)
+  expect(controller.getSnapshot().contextProjection).toBeUndefined()
+  expect(controller.getSnapshot().active?.parsed.deferredRawEntryIds).toEqual(['user-1'])
+  const event = controller.getSnapshot().view!.events.find((item) => item.kind === 'user')!
+  await controller.dispatch({ type: 'select-event', eventId: event.id })
+  await controller.dispatch({ type: 'toggle-event-kind', kind: 'thinking' })
+  const kinds = controller.getSnapshot().enabledKinds
+  later.resolve({ 'user-1': { leafId: 'user-1', messageCount: 1, contextEntryCount: 1, excluded: {} } })
+  await vi.waitFor(() => expect(controller.getSnapshot().contextProjection?.messageCount).toBe(1))
+  expect(controller.getSnapshot().selectedEventId).toBe(event.id)
+  expect(controller.getSnapshot().enabledKinds).toBe(kinds)
+  await controller.dispatch({ type: 'open', session: session('beta') })
+  await controller.dispatch({ type: 'open', session: session('alpha') })
+  expect(readContext).toHaveBeenCalledTimes(1)
+  expect(controller.getSnapshot().contextProjection?.messageCount).toBe(1)
+})
+
+it('切换会话中止旧请求，旧内容与投影均不能覆盖新会话', async () => {
+  const old = deferred<SessionFileResponse>()
+  let oldSignal: AbortSignal | undefined
+  const parse = vi.fn(parseSessionJsonl)
+  const controller = createController(async (token, signal) => {
+    if (token === 'alpha') { oldSignal = signal; return old.promise }
+    return payload(token, content('Beta'))
+  }, { parseSession: parse })
+  const opening = controller.dispatch({ type: 'open', session: session('alpha') })
+  await controller.dispatch({ type: 'open', session: session('beta') })
+  expect(oldSignal?.aborted).toBe(true)
+  old.resolve(payload('alpha', content('Old data')))
+  await opening
+  expect(controller.getSnapshot().active?.token).toBe('beta')
+  expect(parse).toHaveBeenCalledTimes(1)
+})
+
+
+it('轻量索引不解析完整会话，能按需切换分支且复用已加载的分支', async () => {
+  const make = (leaf: string): SessionFileResponse => ({ ...payload('indexed', ''), prepared: {
+    parsed: { header: JSON.parse(HEADER), sourceName: 'indexed.jsonl', entries: [], warnings: [], currentLeafId: 'a',
+      displayTitle: 'Indexed session', rawEntriesDeferred: true,
+      branches: [{ leafId: 'a', label: 'A', isCurrent: true }, { leafId: 'b', label: 'B', isCurrent: false }] },
+    leafId: leaf, definitions: [], stats: { entryCount: 60000, turnCount: 1 },
+    events: [{ id: leaf + ':user', entryId: leaf, kind: 'user', title: 'User', summary: leaf, content: leaf, raw: {} }],
+    turns: [{ id: 'turn', index: 1, label: 'Turn', eventIds: [leaf + ':user'] }],
+  } })
+  const parse = vi.fn(parseSessionJsonl)
+  const read = vi.fn(async (_token: string, _signal?: AbortSignal, leaf?: string) => make(leaf ?? 'a'))
+  const controller = createController(read, { parseSession: parse })
+  await controller.dispatch({ type: 'open', session: session('indexed') })
+  expect(parse).not.toHaveBeenCalled()
+  expect(controller.getSnapshot().sessionTitle).toBe('Indexed session')
+  expect(controller.getSnapshot().view?.stats.entryCount).toBe(60000)
+  await controller.dispatch({ type: 'select-branch', leafId: 'b' })
+  expect(controller.getSnapshot().view?.events[0].content).toBe('b')
+  expect(controller.getSnapshot().selectedLeafId).toBe('b')
+  await controller.dispatch({ type: 'select-branch', leafId: 'a' })
+  expect(controller.getSnapshot().view?.events[0].content).toBe('a')
+  expect(read).toHaveBeenCalledTimes(2)
 })

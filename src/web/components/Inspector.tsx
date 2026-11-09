@@ -11,16 +11,19 @@ import {
   LocateFixed,
   X,
 } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { formatClock, formatDateTime, formatDuration } from '../../core/format'
-import type { CapturedToolDefinition, SystemPromptComposition, TimelineEvent } from '../../core/types'
+import type { CapturedToolDefinition, RawObject, SystemPromptComposition, TimelineEvent } from '../../core/types'
 import { parseSystemPromptSections } from '../../core/prompt-sections'
 import { getToolProvenanceLabel, resolveToolProvenance, sanitizeToolForApi } from '../../core/tool-provenance'
 import { PromptDiffView } from './PromptDiffView'
 import { useI18n } from '../i18n'
+import { useEventContent, type EventContentLoader } from '../event-content'
 
 interface InspectorProps {
+  loadContent?: EventContentLoader
   event: TimelineEvent | null
+  loadRawEntry?: (entryId: string, signal: AbortSignal) => Promise<RawObject>
   previousPrompt?: string
   mobileOpen: boolean
   onClose: () => void
@@ -163,7 +166,7 @@ function PromptCompositionView({ prompt, composition }: {
 
 function EventOverview({ event }: { event: TimelineEvent }) {
   const { t, localizeTitle } = useI18n()
-  const totalChars = event.content?.length ?? 0
+  const totalChars = event.contentLength ?? event.content?.length ?? 0
   const estimatedTokens = Math.ceil(totalChars / 4)
   const isToolDef = event.kind === 'tool-definitions'
   const model = event.model || event.systemPrompt?.model
@@ -296,9 +299,27 @@ function EventContentView({ event, onJumpToEntry }: { event: TimelineEvent; onJu
   )
 }
 
-function EventRawView({ event }: { event: TimelineEvent }) {
+function EventRawView({ event, loadRawEntry }: { event: TimelineEvent; loadRawEntry?: InspectorProps['loadRawEntry'] }) {
   const { t } = useI18n()
-  const rawText = JSON.stringify(event.raw, null, 2)
+  const [loaded, setLoaded] = useState<{ id: string; raw?: RawObject; failed?: boolean } | null>(null)
+  const [attempt, setAttempt] = useState(0)
+  useEffect(() => {
+    if (!loadRawEntry) return
+    const request = new AbortController()
+    let active = true
+    setLoaded(null)
+    void loadRawEntry(event.entryId, request.signal).then(
+      (raw) => { if (active) setLoaded({ id: event.entryId, raw }) },
+      () => { if (active) setLoaded({ id: event.entryId, failed: true }) },
+    )
+    return () => { active = false; request.abort() }
+  }, [event.entryId, loadRawEntry, attempt])
+  const result = loaded?.id === event.entryId ? loaded : null
+  if (loadRawEntry && !result) return <div className="inspector-empty" role="status">{t.common.loading}</div>
+  if (loadRawEntry && result?.failed) return <div className="inspector-empty" role="alert">
+    <p>{t.inspector.views.rawLoadError}</p><button type="button" onClick={() => setAttempt((value) => value + 1)}>{t.inspector.views.retryRaw}</button>
+  </div>
+  const rawText = JSON.stringify(loadRawEntry ? result?.raw : event.raw, null, 2)
 
   return (
     <div className="content-view raw-view">
@@ -318,8 +339,10 @@ function EventRawView({ event }: { event: TimelineEvent }) {
   )
 }
 
-export function Inspector({ event, previousPrompt, mobileOpen, onClose, onJumpToEvent, onJumpToEntry }: InspectorProps) {
+export function Inspector({ event: originalEvent, loadContent, loadRawEntry, previousPrompt, mobileOpen, onClose, onJumpToEvent, onJumpToEntry }: InspectorProps) {
   const { t, localizeTitle } = useI18n()
+  const loaded = useEventContent(originalEvent, loadContent)
+  const event = loaded.event
   const [preferredTab, setTab] = useState<InspectorTab>('content')
 
   const tools = event?.toolDefinitions ?? []
@@ -394,7 +417,11 @@ export function Inspector({ event, previousPrompt, mobileOpen, onClose, onJumpTo
             ) : tab === 'diff' && event ? (
               <PromptDiffView key={event.id} event={event} previousPrompt={previousPrompt} />
             ) : tab === 'raw' ? (
-              <EventRawView event={event} />
+              <EventRawView key={event.id} event={event} loadRawEntry={loadRawEntry} />
+            ) : loaded.loading ? (
+              <div className="inspector-empty" role="status">{t.common.loading}</div>
+            ) : loaded.failed ? (
+              <div className="inspector-empty" role="alert"><p>{t.inspector.views.contentLoadError}</p><button type="button" onClick={loaded.retry}>{t.inspector.views.retryRaw}</button></div>
             ) : isToolDef ? (
               <ToolDefinitionsView tools={tools} />
             ) : (

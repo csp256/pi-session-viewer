@@ -55,7 +55,7 @@ export function sessionCacheKey(token: string, modifiedAt: string): string {
  * budget on the safe side of the estimate.
  */
 function estimateBytes(entry: CachedSession): number {
-  return entry.content.length * 2
+  return entry.content.length * 2 + (entry.parsed.preparedBytes ?? 0)
 }
 
 /**

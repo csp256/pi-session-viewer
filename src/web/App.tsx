@@ -1,6 +1,6 @@
 import { AlertCircle, ArrowLeft, Bot, Clock3, Copy, Menu, Moon, PanelRightOpen, RefreshCw, Rows3, Sun, X } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
-import { fetchSession, fetchSessions, resolveSession } from './api'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react'
+import { fetchEventContent, fetchSession, fetchSessionEntry, fetchSessionContext, fetchSessions, resolveSession } from './api'
 import { Inspector } from './components/Inspector'
 import { SessionSidebar } from './components/SessionSidebar'
 import { SidebarResizer } from './components/SidebarResizer'
@@ -20,6 +20,8 @@ import type {
 } from '../core/types'
 import { useI18n } from './i18n'
 import { useTheme } from './theme'
+import { createLruCache } from '../core/lru-cache'
+import type { EventContentLoader } from './event-content'
 
 const initialCatalogLoadControllers = new WeakSet<object>()
 
@@ -109,13 +111,17 @@ function App() {
   const timelineRef = useRef<TimelineHandle>(null)
 
   const [controller] = useState(() => createSessionViewController<File>({
-    readServerSession: async (token) => {
-      if (!accessToken) throw { code: 'missing-token' }
-      return fetchSession(token, accessToken)
+    readContext: async (token, signal, modifiedAt) => {
+      if (!accessToken) return null
+      return fetchSessionContext(token, accessToken, signal, modifiedAt)
     },
-    resolveSubagent: async (targetFile, parentRelative) => {
+    readServerSession: async (token, signal, leafId, fresh, afterVersion) => {
       if (!accessToken) throw { code: 'missing-token' }
-      return resolveSession(targetFile, parentRelative, accessToken)
+      return fetchSession(token, accessToken, signal, leafId, fresh, afterVersion)
+    },
+    resolveSubagent: async (targetFile, parentRelative, signal) => {
+      if (!accessToken) throw { code: 'missing-token' }
+      return resolveSession(targetFile, parentRelative, accessToken, signal)
     },
     readImportedFile: (source) => source.file.text(),
     refreshCatalog: async () => {
@@ -157,6 +163,19 @@ function App() {
   const activeContextProjection = sessionState.contextProjection
   const selectedEvent = sessionState.selectedEvent
   const previousPrompt = sessionState.previousPrompt
+  const contentCache = useMemo(() => createLruCache<string>({ maxEntries: 64, maxWeight: 8 * 1024 * 1024, weigh: (value) => value.length * 2 }), [selectedToken, selectedMetadata?.modifiedAt])
+  const loadEventContent = useCallback<EventContentLoader>(async (event, signal) => {
+    const cached = contentCache.get(event.id)
+    if (cached !== undefined) return cached
+    if (!selectedToken || !accessToken) throw new Error('Session unavailable')
+    const content = await fetchEventContent(selectedToken, event.entryId, event.id, accessToken, signal)
+    contentCache.set(event.id, content)
+    return content
+  }, [contentCache, selectedToken, accessToken])
+  const loadRawEntry = useCallback((entryId: string, signal: AbortSignal) => {
+    if (!selectedToken || !accessToken) throw new Error('Session unavailable')
+    return fetchSessionEntry(selectedToken, entryId, accessToken, signal)
+  }, [selectedToken, accessToken])
   const visibleTurns = sessionState.visibleTurns
   const fullJsonlPath = sessionState.fullJsonlPath
 
@@ -180,6 +199,13 @@ function App() {
     const viewport = timelineRef.current?.getViewport() ?? null
     void controller.dispatch({ type: 'refresh', viewport })
   }, [controller])
+  useEffect(() => {
+    if (!parsedSession?.preparedRefreshNeeded) return
+    const frame = requestAnimationFrame(() => {
+      void controller.dispatch({ type: 'refresh', viewport: timelineRef.current?.getViewport() ?? null })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [controller, parsedSession])
 
   const openServerSession = useCallback((session: SessionListItem) => {
     setSidebarOpen(false)
@@ -355,11 +381,13 @@ function App() {
                 <div><span>{t.overview.duration}</span><strong>{formatDuration(view.stats.elapsedMs)}</strong></div>
                 <div><span>{t.overview.started}</span><strong>{formatDateTime(view.stats.startedAt)}</strong></div>
               </section>
+              {parsedSession.preparedRefreshNeeded && <div className="session-update-status" role="status">{t.overview.updatingSnapshot}</div>}
               <Timeline
                 ref={timelineRef}
                 session={parsedSession}
                 turns={visibleTurns}
                 allEvents={view.events}
+                loadContent={loadEventContent}
                 selectedEventId={selectedEventId}
                 restorePosition={restorePosition}
                 selectedLeafId={selectedLeafId}
@@ -385,6 +413,8 @@ function App() {
 
         <Inspector
           event={selectedEvent}
+          loadContent={loadEventContent}
+          loadRawEntry={selectedEvent && (parsedSession?.rawEntriesDeferred || parsedSession?.deferredRawEntryIds?.includes(selectedEvent.entryId)) ? loadRawEntry : undefined}
           previousPrompt={previousPrompt}
           mobileOpen={inspectorOpen}
           onClose={() => setInspectorOpen(false)}
