@@ -2,7 +2,8 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useS
 import { en, type Translations } from './locales/en'
 import { zhCN } from './locales/zh-CN'
 
-export type Locale = 'en' | 'zh-CN'
+import { resolveInitialLocale, type Locale } from './locale'
+export type { Locale } from './locale'
 
 const STORAGE_KEY = 'pi_session_viewer_locale'
 
@@ -21,16 +22,16 @@ interface I18nContextValue {
 const I18nContext = createContext<I18nContextValue | null>(null)
 
 function detectInitialLocale(): Locale {
+  let saved: string | null = null
   try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved === 'en' || saved === 'zh-CN') return saved
-    if (typeof navigator !== 'undefined' && navigator.language && navigator.language.toLowerCase().startsWith('zh')) {
-      return 'zh-CN'
-    }
+    saved = localStorage.getItem(STORAGE_KEY)
   } catch {
-    // ignore localStorage/navigator error in non-browser environments
+    // 禁用存储不应妨碍按浏览器的首选语言决定默认值。
   }
-  return 'en'
+  const preferred = typeof navigator === 'undefined'
+    ? undefined
+    : navigator.languages?.[0] || navigator.language
+  return resolveInitialLocale(saved, preferred)
 }
 
 export function localizeEventTitle(title: string, locale: Locale): string {
