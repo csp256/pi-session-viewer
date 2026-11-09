@@ -95,6 +95,52 @@ function createController(
 }
 
 describe('Session View controller', () => {
+  it('从完整会话修正缺失的目录名称，并在目录刷新及切换后保留', async () => {
+    const named = content('First request') + '\n' + JSON.stringify({
+      type: 'session_info', id: 'name', parentId: 'user-1', name: 'Saved session name',
+    })
+    const alpha = session('alpha')
+    const beta = session('beta')
+    const read = vi.fn(async (token: string) => payload(token, token === 'alpha' ? named : content('Beta request')))
+    const controller = createController(read, { refreshCatalog: async () => catalog([alpha, beta]) })
+    await controller.dispatch({ type: 'load-catalog', autoOpen: true })
+    expect(controller.getSnapshot().sessionTitle).toBe('Saved session name')
+    expect(controller.getSnapshot().active?.metadata).toMatchObject({ name: 'Saved session name', title: 'Saved session name' })
+    expect(controller.getSnapshot().catalog.sessions[0]).toMatchObject({ name: 'Saved session name', title: 'Saved session name' })
+
+    await controller.dispatch({ type: 'refresh' })
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(controller.getSnapshot().active?.metadata?.name).toBe('Saved session name')
+    await controller.dispatch({ type: 'open', session: beta })
+    await controller.dispatch({ type: 'refresh' })
+    expect(controller.getSnapshot().catalog.sessions[0]?.name).toBe('Saved session name')
+    expect(controller.getSnapshot().catalog.sessions[1]?.name).toBeUndefined()
+  })
+
+  it('从完整缓存修正旧名称，但不会用旧版本名称覆盖新版本', async () => {
+    const cache = createSessionCache()
+    const named = (name: string) => content('First request') + '\n' + JSON.stringify({
+      type: 'session_info', id: 'name', parentId: 'user-1', name,
+    })
+    const old = named('Cached saved name')
+    cache.remember(sessionCacheKey('alpha', 'm1'), {
+      token: 'alpha', modifiedAt: 'm1', content: old, parsed: parseSessionJsonl(old), contextProjections: null,
+    })
+    let listed = { ...session('alpha'), name: 'Stale catalog name' }
+    const read = vi.fn(async (token: string) => payload(token, named('New saved name'), 'm2'))
+    const controller = createController(read, { cache, refreshCatalog: async () => catalog([listed]) })
+    await controller.dispatch({ type: 'load-catalog', autoOpen: true })
+    expect(read).not.toHaveBeenCalled()
+    expect(controller.getSnapshot().catalog.sessions[0]?.name).toBe('Cached saved name')
+    expect(controller.getSnapshot().active?.metadata?.name).toBe('Cached saved name')
+
+    listed = { ...listed, modifiedAt: 'm2', name: 'New catalog name' }
+    await controller.dispatch({ type: 'refresh' })
+    expect(read).toHaveBeenCalledTimes(1)
+    expect(controller.getSnapshot().catalog.sessions[0]?.name).toBe('New saved name')
+    expect(controller.getSnapshot().active?.metadata?.name).toBe('New saved name')
+  })
+
   it('opens a server Session and commits a complete initial view', async () => {
     const controller = createController(async (token) => payload(token, content('Alpha request'), 'm1', 'alpha.jsonl'))
 
