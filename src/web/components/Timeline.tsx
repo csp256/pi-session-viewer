@@ -1,4 +1,4 @@
-import { AlertTriangle, BookOpen, Bot, Boxes, Brain, CheckCheck, CheckCircle2, ChevronDown, CircleUserRound, Cog, CornerDownRight, EyeOff, ScrollText, Square, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, ArrowDownUp, BookOpen, Bot, Boxes, Brain, CheckCheck, CheckCircle2, ChevronDown, CircleUserRound, Cog, CornerDownRight, EyeOff, ScrollText, Square, Wrench, XCircle } from 'lucide-react'
 import { GroupedVirtuoso, type GroupedVirtuosoHandle, type GroupProps } from 'react-virtuoso'
 import { forwardRef, lazy, memo, Suspense, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { buildCausalLayout, causalLaneX, type CausalEventLayout } from '../../core/causal-layout'
@@ -6,6 +6,7 @@ import { allEventKinds } from '../../core/event-kinds'
 import { formatClock, formatDuration } from '../../core/format'
 import type { ContextProjection, EventKind, ParsedSession, SubagentReference, TimelineEvent, TimelineTurn } from '../../core/types'
 import { useI18n } from '../i18n'
+import { orderTimelineTurns, useTimelineOrder } from '../timeline-order'
 
 const EventReader = lazy(() => import('./EventReader').then((module) => ({ default: module.EventReader })))
 
@@ -98,7 +99,7 @@ function groupLlmOutputEvents(events: TimelineEvent[]): LlmOutputGroup[] {
   return groups
 }
 
-const EventRow = memo(function EventRow({ event, index, eventCount, turnId, selected, focused, causal, maxLanes, highlightedCallId, mutedCallIds, clockLabel, llmOutputBoundary, onSelectEvent, onReadEvent, onFocusEvent, onOpenSubagent }: {
+const EventRow = memo(function EventRow({ event, index, eventCount, turnId, selected, focused, causal, maxLanes, highlightedCallId, mutedCallIds, clockLabel, llmOutputBoundary, reversed, onSelectEvent, onReadEvent, onFocusEvent, onOpenSubagent }: {
   event: TimelineEvent
   index: number
   eventCount: number
@@ -111,6 +112,7 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
   mutedCallIds?: Set<string>
   clockLabel: string
   llmOutputBoundary?: LlmOutputBoundary
+  reversed: boolean
   onSelectEvent: (event: TimelineEvent) => void
   onReadEvent: (event: TimelineEvent) => void
   onFocusEvent: (index: number) => void
@@ -170,11 +172,12 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
       <span className="event-track" aria-hidden="true">
         <span className="track-dot"><Icon size={14} /></span>
         {causal.segments.map((segment) => {
+          const phase = reversed && segment.phase !== 'pass' ? (segment.phase === 'start' ? 'end' : 'start') : segment.phase
           const isHighlighted = highlightedCallId === segment.callId
           const isMuted = Boolean(mutedCallIds?.has(segment.callId))
           return (
             <span
-              className={`causal-rail causal-rail--${segment.phase}${isHighlighted ? ' is-highlighted' : ''}${isMuted ? ' is-muted' : ''}`}
+              className={`causal-rail causal-rail--${phase}${isHighlighted ? ' is-highlighted' : ''}${isMuted ? ' is-muted' : ''}`}
               data-call-id={segment.callId}
               key={segment.callId}
               style={{ '--lane-x': `${causalLaneX(segment.lane, maxLanes)}px` } as React.CSSProperties}
@@ -305,7 +308,7 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
 
 export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timeline({
   session,
-  turns,
+  turns: chronologicalTurns,
   allEvents,
   selectedEventId,
   restorePosition,
@@ -321,6 +324,8 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
   onOpenSubagent,
 }, ref) {
   const { t, localizeTitle } = useI18n()
+  const { order, toggleOrder } = useTimelineOrder()
+  const turns = useMemo(() => orderTimelineTurns(chronologicalTurns, order), [chronologicalTurns, order])
   const [readingEvent, setReadingEvent] = useState<TimelineEvent | null>(null)
   const closeReader = useCallback(() => setReadingEvent(null), [])
   useEffect(() => setReadingEvent(null), [session.sourceName, session.header?.id, selectedLeafId])
@@ -696,6 +701,10 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
       </div>
 
       <div className="branch-bar">
+        <button className="timeline-order-toggle" type="button" aria-label={t.timeline.reverseOrder}
+          aria-pressed={order === 'newest-first'} onClick={toggleOrder}>
+          <ArrowDownUp size={14} />{order === 'oldest-first' ? t.timeline.oldestFirst : t.timeline.newestFirst}
+        </button>
         <label htmlFor="branch-select">{t.timeline.branchLabel}</label>
         <select id="branch-select" value={selectedLeafId ?? ''} onChange={(event) => onSelectBranch(event.target.value)}>
           {session.branches.map((branch) => (
@@ -722,6 +731,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
         </div>
       ) : (
         <GroupedVirtuoso
+          key={order}
           ref={virtuosoRef}
           className="timeline-scroll"
           role="listbox"
@@ -766,6 +776,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
                 highlightedCallId={highlightedCallId}
                 mutedCallIds={mutedCallIds}
                 clockLabel={clockLabels.get(item.event.id) ?? ''}
+                reversed={order === 'newest-first'}
                 llmOutputBoundary={item.llmOutputBoundary}
                 onReadEvent={setReadingEvent}
                 onSelectEvent={stableSelectEvent}

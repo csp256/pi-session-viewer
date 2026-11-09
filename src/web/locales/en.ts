@@ -70,6 +70,9 @@ export const en = {
     image: 'Image',
   },
   timeline: {
+    reverseOrder: 'Reverse timeline order',
+    oldestFirst: 'Oldest first',
+    newestFirst: 'Newest first',
     ariaLabel: 'Session timeline',
     filterLabel: 'Event filter',
     selectAllTitle: 'Select all event types',

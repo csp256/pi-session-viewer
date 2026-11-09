@@ -72,6 +72,9 @@ export const zhCN: Translations = {
     image: '图片',
   },
   timeline: {
+    reverseOrder: '反转时间线顺序',
+    oldestFirst: '最早在前',
+    newestFirst: '最新在前',
     ariaLabel: '会话时间轴',
     filterLabel: '显示事件',
     selectAllTitle: '全选所有事件类型',
