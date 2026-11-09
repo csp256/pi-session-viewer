@@ -27,6 +27,8 @@ export const zhCN: Translations = {
     openInspector: '打开详情',
     closeInspector: '关闭详情',
     closeOverlay: '关闭浮层',
+    resizeSidebar: '调整会话侧栏宽度',
+    resizeInspector: '调整详情侧栏宽度',
     language: '语言',
     switchToLight: '切换为浅色模式',
     switchToDark: '切换为深色模式',
