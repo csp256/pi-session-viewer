@@ -1,11 +1,13 @@
-import { AlertTriangle, Bot, Boxes, Brain, CheckCheck, CheckCircle2, ChevronDown, CircleUserRound, Cog, CornerDownRight, EyeOff, ScrollText, Square, Wrench, XCircle } from 'lucide-react'
+import { AlertTriangle, BookOpen, Bot, Boxes, Brain, CheckCheck, CheckCircle2, ChevronDown, CircleUserRound, Cog, CornerDownRight, EyeOff, ScrollText, Square, Wrench, XCircle } from 'lucide-react'
 import { GroupedVirtuoso, type GroupedVirtuosoHandle, type GroupProps } from 'react-virtuoso'
-import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
+import { forwardRef, lazy, memo, Suspense, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { buildCausalLayout, causalLaneX, type CausalEventLayout } from '../../core/causal-layout'
 import { allEventKinds } from '../../core/event-kinds'
 import { formatClock, formatDuration } from '../../core/format'
 import type { ContextProjection, EventKind, ParsedSession, SubagentReference, TimelineEvent, TimelineTurn } from '../../core/types'
 import { useI18n } from '../i18n'
+
+const EventReader = lazy(() => import('./EventReader').then((module) => ({ default: module.EventReader })))
 
 const kindMeta: Record<EventKind, { icon: ComponentType<{ size?: number; className?: string }>; color: string }> = {
   'system-prompt': { icon: ScrollText, color: 'light-dark(#8a4f68, var(--rose))' },
@@ -96,7 +98,7 @@ function groupLlmOutputEvents(events: TimelineEvent[]): LlmOutputGroup[] {
   return groups
 }
 
-const EventRow = memo(function EventRow({ event, index, eventCount, turnId, selected, focused, causal, maxLanes, highlightedCallId, mutedCallIds, clockLabel, llmOutputBoundary, onSelectEvent, onFocusEvent, onOpenSubagent }: {
+const EventRow = memo(function EventRow({ event, index, eventCount, turnId, selected, focused, causal, maxLanes, highlightedCallId, mutedCallIds, clockLabel, llmOutputBoundary, onSelectEvent, onReadEvent, onFocusEvent, onOpenSubagent }: {
   event: TimelineEvent
   index: number
   eventCount: number
@@ -110,6 +112,7 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
   clockLabel: string
   llmOutputBoundary?: LlmOutputBoundary
   onSelectEvent: (event: TimelineEvent) => void
+  onReadEvent: (event: TimelineEvent) => void
   onFocusEvent: (index: number) => void
   onOpenSubagent?: (subagent: SubagentReference, sourceEventId?: string) => void
 }) {
@@ -150,6 +153,11 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
       onClick={() => {
         onFocusEvent(index)
         onSelectEvent(event)
+      }}
+      title={t.reader.hint}
+      onDoubleClick={(click) => {
+        if (click.target instanceof Element && click.target.closest('button, a, input, select, textarea, summary')) return
+        onReadEvent(event)
       }}
       data-llm-output-group={llmOutputBoundary?.id}
       data-tool-call-id={event.toolCallId}
@@ -255,6 +263,11 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
               )}
             </span>
           )}
+          <button className="event-read-button" type="button" aria-label={t.reader.open} title={t.reader.open}
+            onPointerDown={(pointer) => pointer.stopPropagation()}
+            onClick={(click) => { click.stopPropagation(); onReadEvent(event) }}>
+            <BookOpen size={14} />
+          </button>
           {charCount != null && event.kind !== 'system' && (
             <span className="event-char-count">{t.common.chars(charCount)}</span>
           )}
@@ -308,6 +321,9 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
   onOpenSubagent,
 }, ref) {
   const { t, localizeTitle } = useI18n()
+  const [readingEvent, setReadingEvent] = useState<TimelineEvent | null>(null)
+  const closeReader = useCallback(() => setReadingEvent(null), [])
+  useEffect(() => setReadingEvent(null), [session.sourceName, session.header?.id, selectedLeafId])
   const causalLayout = useMemo(() => buildCausalLayout(allEvents), [allEvents])
   const selectedEvent = useMemo(
     () => allEvents.find((event) => event.id === selectedEventId),
@@ -513,7 +529,10 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
       keyboardEvent.preventDefault()
       const focusedIndex = focusedEventIndexRef.current ?? 0
       const item = timelineItems[focusedIndex]
-      if (item) stableSelectEvent(item.event)
+      if (item) {
+        stableSelectEvent(item.event)
+        if (keyboardEvent.key === 'Enter' && keyboardEvent.shiftKey) setReadingEvent(item.event)
+      }
     }
   }, [onMoveFocus, stableSelectEvent, timelineItems])
 
@@ -648,6 +667,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
 
   return (
     <section className="timeline-panel" aria-label={t.timeline.ariaLabel}>
+      {readingEvent && <Suspense fallback={null}><EventReader key={readingEvent.id} event={readingEvent} onClose={closeReader} /></Suspense>}
       <div className="visually-hidden" role="status" aria-live="polite" aria-atomic="true">{focusedAnnouncement}</div>
       <div className="visually-hidden" id="timeline-keyboard-help">{t.timeline.keyboardInstructions}</div>
       <div className="filter-bar">
@@ -747,6 +767,7 @@ export const Timeline = forwardRef<TimelineHandle, TimelineProps>(function Timel
                 mutedCallIds={mutedCallIds}
                 clockLabel={clockLabels.get(item.event.id) ?? ''}
                 llmOutputBoundary={item.llmOutputBoundary}
+                onReadEvent={setReadingEvent}
                 onSelectEvent={stableSelectEvent}
                 onFocusEvent={onFocusEvent}
                 onOpenSubagent={stableOpenSubagent}
