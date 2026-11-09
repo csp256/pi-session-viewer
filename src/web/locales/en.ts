@@ -61,6 +61,14 @@ export const en = {
     readOnlyDir: 'Read-only directory',
     notConnected: 'Not connected',
   },
+  reader: {
+    open: 'Open reading view',
+    label: 'Reading view',
+    hint: 'Double-click to read; Shift+Enter opens the focused event.',
+    showSource: 'Show source',
+    renderMarkdown: 'Render Markdown',
+    image: 'Image',
+  },
   timeline: {
     ariaLabel: 'Session timeline',
     filterLabel: 'Event filter',
@@ -70,7 +78,7 @@ export const en = {
     deselectAll: 'Clear',
     branchLabel: 'Session branch',
     visibleEvents: (count: number) => `${count} visible events`,
-    keyboardInstructions: 'Use Up and Down Arrow keys to focus events. Press Enter or Space to show the focused event in Details.',
+    keyboardInstructions: 'Use Up and Down Arrow keys to focus events. Press Enter or Space to show the focused event in Details. Press Shift+Enter to open the reading view.',
     eventAccessibleLabel: (title: string, time: string, position: number, total: number, focused: boolean, selected: boolean) => `${focused ? 'Focused event' : 'Event'} ${position} of ${total} at ${time}: ${title}${selected ? ', selected in Inspector' : ''}`,
     keyboardAnnouncement: (focusedTitle: string, position: number, total: number, selectedTitle: string) => `Focused event ${position} of ${total}: ${focusedTitle}. Selected event in Inspector: ${selectedTitle}.`,
     warningsSummary: (count: number) => `${count} parse warning${count === 1 ? '' : 's'}`,

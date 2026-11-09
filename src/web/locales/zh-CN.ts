@@ -63,6 +63,14 @@ export const zhCN: Translations = {
     readOnlyDir: '只读目录',
     notConnected: '尚未连接',
   },
+  reader: {
+    open: '打开阅读视图',
+    label: '阅读视图',
+    hint: '双击阅读；Shift+Enter 打开当前聚焦事件。',
+    showSource: '查看源码',
+    renderMarkdown: '渲染 Markdown',
+    image: '图片',
+  },
   timeline: {
     ariaLabel: '会话时间轴',
     filterLabel: '显示事件',
@@ -72,7 +80,7 @@ export const zhCN: Translations = {
     deselectAll: '全不选',
     branchLabel: '会话分支',
     visibleEvents: (count: number) => `${count} 个可见事件`,
-    keyboardInstructions: '使用上、下方向键移动事件焦点，按 Enter 或空格在详情中查看当前事件。',
+    keyboardInstructions: '使用上、下方向键移动事件焦点，按 Enter 或空格在详情中查看当前事件。 按 Shift+Enter 打开阅读视图。',
     eventAccessibleLabel: (title: string, time: string, position: number, total: number, focused: boolean, selected: boolean) => `${focused ? '焦点事件' : '事件'} ${position}/${total}，时间 ${time}：${title}${selected ? '，当前在详情中查看' : ''}`,
     keyboardAnnouncement: (focusedTitle: string, position: number, total: number, selectedTitle: string) => `焦点事件 ${position}/${total}：${focusedTitle}。详情中当前选择的事件：${selectedTitle}。`,
     warningsSummary: (count: number) => `${count} 条解析警告`,
