@@ -155,3 +155,23 @@ export async function computeContextProjections(
 
   return Object.keys(projections).length > 0 ? projections : undefined
 }
+
+
+/** Live 模式复用 Pi 解析的完整记录，只重新投影当前分支，不重新解析整个文件。 */
+export async function computeLiveContextProjection(entries: unknown[], leafId: string | null): Promise<ContextProjection | undefined> {
+  const api = await loadPiContextApi()
+  if (!api || !leafId) return undefined
+  try {
+    const edits = new Map<string, string>()
+    for (const entry of entries) {
+      if (!entry || typeof entry !== 'object') continue
+      const raw = entry as Record<string, unknown>
+      if (raw.type !== 'context_edit' || typeof raw.id !== 'string' || typeof raw.targetId !== 'string') continue
+      if (raw.replacement === null || raw.replacement === undefined) edits.set(raw.targetId, raw.id)
+      else edits.delete(raw.targetId)
+    }
+    const projection = api.buildSessionProjection(entries, leafId)
+    return { leafId, messageCount: projection.entries.reduce((total, entry) => total + entry.messages.length, 0),
+      contextEntryCount: projection.entries.length, excluded: collectExclusions(projection.entries, edits), piVersion: resolvePiVersion() }
+  } catch { return undefined }
+}

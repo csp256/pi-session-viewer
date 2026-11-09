@@ -728,3 +728,29 @@ it('轻量索引不解析完整会话，能按需切换分支且复用已加载�
   expect(controller.getSnapshot().view?.events[0].content).toBe('a')
   expect(read).toHaveBeenCalledTimes(2)
 })
+
+it('Live 更新保持选择和锚点，忽略导航后到达的其他会话更新', async () => {
+  const { prepareSessionView } = await import('../server/prepared-session')
+  const { buildSessionView } = await import('../core/session-view')
+  const { diffPreparedSessions } = await import('../core/prepared-session-delta')
+  const original = content('Reading history')
+  const firstParsed = parseSessionJsonl(original, 'live.jsonl')
+  const first = prepareSessionView(firstParsed, buildSessionView(firstParsed), firstParsed.currentLeafId)
+  const controller = createController(async () => payload('live', original))
+  await controller.dispatch({ type: 'open', session: session('live') })
+  const viewport = { scrollTop: 180, anchor: { eventId: 'user-1:user', offset: -10 } }
+  await controller.dispatch({ type: 'select-event', eventId: 'user-1:user' })
+  await controller.dispatch({ type: 'live-update', token: 'live', leaf: null,
+    response: { cursor: 'first', snapshot: { ...payload('live', ''), prepared: first } }, viewport })
+  const nextParsed = parseSessionJsonl(original + '\n' + JSON.stringify({ type: 'message', id: 'next', parentId: 'user-1',
+    timestamp: '2026-01-01T00:00:03Z', message: { role: 'assistant', content: [{ type: 'text', text: 'New answer' }] } }), 'live.jsonl')
+  const next = prepareSessionView(nextParsed, buildSessionView(nextParsed), nextParsed.currentLeafId)
+  const response = { cursor: 'second', delta: diffPreparedSessions(first, next, '2026-01-01T00:00:03Z') }
+  await controller.dispatch({ type: 'live-update', token: 'live', leaf: null, response, viewport })
+  expect(controller.getSnapshot().view?.events.some((event) => event.content === 'New answer')).toBe(true)
+  expect(controller.getSnapshot().selectedEventId).toBe('user-1:user')
+  expect(controller.getSnapshot().restoreIntent?.anchor).toEqual(viewport.anchor)
+  expect(controller.getSnapshot().active?.parsed.liveCursor).toBe('second')
+  await controller.dispatch({ type: 'live-update', token: 'somewhere-else', leaf: null, response: { ...response, cursor: 'stale' }, viewport })
+  expect(controller.getSnapshot().active?.parsed.liveCursor).toBe('second')
+})

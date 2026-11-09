@@ -476,3 +476,21 @@ it('轻量传输不丢失 Raw，延后投影遵守鉴权、文件边界与版本
   expect(context).toEqual(full.contextProjections)
   expect((await fetch(`${server.url}/api/context?session=${token}&modifiedAt=old-version`, { headers })).status).toBe(409)
 })
+
+
+it('Live 接口需要认证和允许的会话路径，未变化时返回无正文 304', async () => {
+  const server = await createServerWithSessions({ 'demo/live.jsonl': [
+    piSessionHeader(), { type: 'message', id: 'u', parentId: null, timestamp: '2026-01-01T00:00:00Z', message: { role: 'user', content: 'Live question' } },
+  ].map((entry) => typeof entry === 'string' ? entry : JSON.stringify(entry)).join('\n') + '\n' })
+  const token = encodeSessionToken('demo/live.jsonl')
+  const url = `${server.url}/api/live?session=${token}`
+  const headers = { Authorization: `Bearer ${server.token}` }
+  expect((await fetch(url)).status).toBe(401)
+  expect((await fetch(url, { method: 'POST', headers })).status).toBe(405)
+  expect((await fetch(`${server.url}/api/live?session=${encodeSessionToken('../outside.jsonl')}`, { headers })).status).toBe(404)
+  const first = await fetch(url, { headers }).then((response) => response.json())
+  expect(first.snapshot.prepared.events.some((event: { content: string }) => event.content === 'Live question')).toBe(true)
+  const idle = await fetch(`${url}&cursor=${first.cursor}`, { headers })
+  expect(idle.status).toBe(304)
+  expect(await idle.text()).toBe('')
+})

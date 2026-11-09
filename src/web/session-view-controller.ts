@@ -4,6 +4,7 @@ import { getSessionName, getSessionTitle } from '../core/session-parser'
 import { buildSessionView, primaryEventForEntry } from '../core/session-view'
 import type {
   ContextProjection,
+  LiveSessionResponse,
   EventKind,
   ParsedSession,
   ProjectSummary,
@@ -15,6 +16,7 @@ import type {
   TimelineEvent,
   TimelineTurn,
 } from '../core/types'
+import { applyPreparedDelta, hydrateEvents } from '../core/prepared-session-delta'
 import { sessionCacheKey, type CachedSession, type SessionCache } from './session-cache'
 
 export interface ImportedSessionSource<FileHandle = unknown> {
@@ -28,6 +30,7 @@ export interface SessionViewAnchor {
 }
 
 export interface SessionViewViewport {
+  atNewest?: boolean
   scrollTop: number
   anchor: SessionViewAnchor | null
 }
@@ -45,6 +48,7 @@ export interface ActiveSessionView<FileHandle = unknown> {
 }
 
 export interface SessionViewRestoreIntent {
+  followNewest?: boolean
   eventId: string | null
   scrollTop?: number
   anchor?: SessionViewAnchor
@@ -106,6 +110,7 @@ export type SessionViewIntent<FileHandle = unknown> =
   | { type: 'set-project-filter'; cwd: string | null }
   | { type: 'open'; session: SessionListItem }
   | { type: 'import'; source: ImportedSessionSource<FileHandle> }
+  | { type: 'live-update'; token: string; leaf: string | null; response: LiveSessionResponse; viewport?: SessionViewViewport | null }
   | { type: 'refresh'; viewport?: SessionViewViewport | null }
   | { type: 'open-subagent'; reference: SubagentReference; sourceEventId?: string; viewport?: SessionViewViewport | null }
   | { type: 'return-to-parent'; targetIndex?: number; viewport?: SessionViewViewport | null }
@@ -167,12 +172,11 @@ function parsePiSession(parseSession: SessionParser, content: string, sourceName
 function parseServerSession(parseSession: SessionParser, payload: SessionFileResponse): ParsedSession {
   if (payload.prepared) {
     const prepared = payload.prepared
-    const events = prepared.events.map((event) => ({ ...event,
-      ...(event.toolDefinitionRef !== undefined ? { toolDefinition: prepared.definitions[event.toolDefinitionRef] } : {}) }))
+    const events = hydrateEvents(prepared.events, prepared.definitions)
     const byId = new Map(events.map((event) => [event.id, event]))
     const view: SessionView = { events, stats: prepared.stats, branchEntries: [],
       turns: prepared.turns.map(({ eventIds, ...turn }) => ({ ...turn, events: eventIds.map((id) => byId.get(id)!).filter(Boolean) })) }
-    return requirePiSession({ ...prepared.parsed, preparedRefreshNeeded: payload.preparedRefreshNeeded, preparedViews: prepared.leafId ? { [prepared.leafId]: view } : {},
+    return requirePiSession({ ...prepared.parsed, preparedDefinitions: prepared.definitions, preparedRefreshNeeded: payload.preparedRefreshNeeded, preparedViews: prepared.leafId ? { [prepared.leafId]: view } : {},
       preparedBytes: prepared.events.length * 600 + prepared.definitions.length * 4096 })
   }
   const parsed = parsePiSession(parseSession, payload.content, payload.relativePath)
@@ -825,6 +829,35 @@ export function createSessionViewController<FileHandle = unknown>(
       case 'open': return dispatchOpen(intent.session)
       case 'import': return dispatchImport(intent.source)
       case 'refresh': return dispatchRefresh(intent.viewport)
+      case 'live-update': {
+        const active = snapshot.active
+        if (!active || active.token !== intent.token || active.source.kind !== 'server' || snapshot.loading || !snapshot.view) return
+        const leaf = snapshot.selectedLeafId === active.parsed.currentLeafId ? null : snapshot.selectedLeafId
+        if (leaf !== intent.leaf) return
+        const response = intent.response
+        let parsed: ParsedSession
+        let modifiedAt: string
+        if (response.snapshot) {
+          parsed = { ...parseServerSession(dependencies.parseSession, response.snapshot), liveCursor: response.cursor }
+          modifiedAt = response.snapshot.modifiedAt
+        } else if (response.delta && active.parsed.liveCursor) {
+          const delta = response.delta
+          const definitions = delta.definitions ?? active.parsed.preparedDefinitions ?? []
+          const view = applyPreparedDelta(snapshot.view, delta, definitions)
+          parsed = { ...delta.parsed, liveCursor: response.cursor, preparedDefinitions: definitions,
+            preparedViews: delta.leafId ? { [delta.leafId]: view } : {}, preparedBytes: view.events.length * 600 }
+          modifiedAt = delta.modifiedAt
+        } else return
+        const projection = response.delta?.contextProjection
+        const contextProjections = response.snapshot?.contextProjections ?? (projection?.leafId ? { [projection.leafId]: projection } : null)
+        const next = { ...active, parsed, contextProjections,
+          source: { ...active.source, modifiedAt }, metadata: active.metadata ? { ...active.metadata, modifiedAt } : null }
+        const restore = makeRestore(null, intent.viewport?.scrollTop, intent.viewport?.anchor)
+        if (intent.viewport?.atNewest) { restore.anchor = undefined; restore.scrollTop = undefined; restore.followNewest = true }
+        rememberSession(dependencies.cache, intent.token, modifiedAt, '', parsed, contextProjections)
+        commit(next, leaf, snapshot.selectedEventId, restore)
+        return
+      }
       case 'open-subagent': return dispatchSubagent(intent.reference, intent.sourceEventId, intent.viewport)
       case 'return-to-parent': return dispatchReturn(intent.targetIndex, intent.viewport)
       case 'select-event': setSelectedEvent(intent.eventId, false); return

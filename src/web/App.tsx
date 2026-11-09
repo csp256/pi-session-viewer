@@ -14,11 +14,13 @@ import { sessionCache } from './session-cache'
 import { createSessionViewController } from './session-view-controller'
 import type {
   EventKind,
+  LiveSessionResponse,
   SessionListItem,
   SubagentReference,
   TimelineEvent,
 } from '../core/types'
 import { useI18n } from './i18n'
+import { useLiveSession } from './use-live-session'
 import { useTheme } from './theme'
 import { createLruCache } from '../core/lru-cache'
 import type { EventContentLoader } from './event-content'
@@ -163,6 +165,14 @@ function App() {
   const activeContextProjection = sessionState.contextProjection
   const selectedEvent = sessionState.selectedEvent
   const previousPrompt = sessionState.previousPrompt
+  const acceptLiveUpdate = useCallback(async (response: LiveSessionResponse, token: string, leaf: string | null) => {
+    await controller.dispatch({ type: 'live-update', token, leaf, response, viewport: timelineRef.current?.getViewport() ?? null })
+    return controller.getSnapshot().active?.parsed.liveCursor === response.cursor
+  }, [controller])
+  const live = useLiveSession({ token: selectedToken, accessToken, onUpdate: acceptLiveUpdate,
+    leaf: sessionState.selectedLeafId === parsedSession?.currentLeafId ? null : sessionState.selectedLeafId,
+    available: Boolean(selectedToken && !sessionLoading && !parsedSession?.preparedRefreshNeeded),
+    version: activeSession?.source.kind === 'server' ? activeSession.source.modifiedAt : '', cursor: parsedSession?.liveCursor })
   const contentCache = useMemo(() => createLruCache<string>({ maxEntries: 64, maxWeight: 8 * 1024 * 1024, weigh: (value) => value.length * 2 }), [selectedToken, selectedMetadata?.modifiedAt])
   const loadEventContent = useCallback<EventContentLoader>(async (event, signal) => {
     const cached = contentCache.get(event.id)
@@ -329,6 +339,11 @@ function App() {
             aria-label={t.header.reloadTitle}
           >
             <RefreshCw className={sessionLoading || catalog.loading ? 'spin' : ''} size={18} />
+          </button>
+          <button type="button" className={`live-toggle ${live.enabled ? 'is-active' : ''}`} aria-label={t.live.toggle}
+            aria-pressed={live.enabled} data-status={live.status} disabled={!selectedToken && !live.enabled}
+            onClick={live.toggle} title={live.enabled ? t.live[live.status] : t.live.off}>
+            <span className="live-dot" aria-hidden="true" />{t.live.label}
           </button>
           <button className="icon-button mobile-only" type="button" onClick={() => { setSidebarOpen(false); setInspectorOpen(true) }} title={t.header.openInspector} aria-label={t.header.openInspector}>
             <PanelRightOpen size={19} />

@@ -118,7 +118,8 @@ export function parseSessionJsonl(content: string, sourceName = 'Local file'): P
   const seenIds = new Set<string>()
   let header: SessionHeader | null = null
 
-  for (const [lineIndex, sourceLine] of content.split(/\r?\n/).entries()) {
+  const sourceLines = content.split(/\r?\n/)
+  for (const [lineIndex, sourceLine] of sourceLines.entries()) {
     const line = sourceLine.trim()
     if (!line) continue
     const lineNumber = lineIndex + 1
@@ -185,6 +186,7 @@ export function parseSessionJsonl(content: string, sourceName = 'Local file'): P
   if (currentLeafId) getPath(entries, currentLeafId, warnings)
   const branches = buildBranches(entries, currentLeafId)
   return {
+    sourceLineCount: sourceLines.length - 1,
     sourceName,
     header,
     entries,
@@ -219,4 +221,37 @@ export function getSessionTitle(session: ParsedSession): string {
     return truncate(contentText(message.content))
   }
   return session.sourceName
+}
+
+
+/** 仅解析追加的 JSONL；分支和父子检查仍使用完整的原始记录图。 */
+export function appendSessionJsonl(session: ParsedSession, content: string): ParsedSession {
+  const tail = parseSessionJsonl(JSON.stringify(session.header) + '\n' + content, session.sourceName)
+  const offset = session.sourceLineCount ?? 0
+  const ids = new Set(session.entries.map((entry) => entry.id))
+  const added: ParsedEntry[] = []
+  const duplicates: ParseWarning[] = []
+  for (const entry of tail.entries) {
+    if (ids.has(entry.id)) {
+      duplicates.push({ code: 'duplicate-id', line: entry.line + offset - 1, message: `Duplicate id "${entry.id}"; skipped.` })
+    } else {
+      ids.add(entry.id)
+      added.push({ ...entry, line: entry.line + offset - 1 })
+    }
+  }
+  const entries = [...session.entries, ...added]
+  const byLine = new Map(entries.map((entry) => [entry.line, entry]))
+  const warnings = [
+    ...session.warnings.filter((warning) => warning.code !== 'missing-parent' || !ids.has(byLine.get(warning.line ?? -1)?.parentId ?? '')),
+    ...tail.warnings.filter((warning) => warning.code !== 'missing-parent' && warning.code !== 'cycle')
+      .map((warning) => ({ ...warning, line: warning.line === undefined ? undefined : warning.line + offset - 1 })),
+    ...duplicates,
+  ]
+  for (const entry of added) if (entry.parentId && !ids.has(entry.parentId)) {
+    warnings.push({ code: 'missing-parent', line: entry.line, message: `Line ${entry.line} references non-existent parentId "${entry.parentId}".` })
+  }
+  const currentLeafId = entries.at(-1)?.id ?? null
+  if (currentLeafId) getPath(entries, currentLeafId, warnings)
+  return { ...session, entries, warnings, currentLeafId, branches: buildBranches(entries, currentLeafId),
+    sourceLineCount: offset + (tail.sourceLineCount ?? 1) - 1 }
 }

@@ -51,3 +51,8 @@ export async function indexedEntry(file: string, id: string, root = defaultRoot(
     } finally { await handle.close() }
   } catch { return undefined }
 }
+
+
+export function rememberEntryOffsets(file: string, stat: Stats, offsets: EntryOffsets): void {
+  memory.set(indexPath(file, defaultRoot()), { identity: identity(stat), offsets })
+}

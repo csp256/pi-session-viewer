@@ -1102,3 +1102,10 @@ h2 { margin: 0; font-size: 15px; font-weight: 600; line-height: 1.2; }
 .timeline-order-arrow.is-active { color: light-dark(#246b83, var(--blue)); opacity: 1; }
 @media (max-width: 600px) { .branch-bar { flex-wrap: wrap; } }
 .session-update-status { flex: 0 0 auto; padding: 5px 18px; color: var(--muted); background: var(--paper); border-bottom: 1px solid var(--line-soft); font-size: 11px; }
+.live-toggle { display: inline-flex; align-items: center; gap: 6px; padding: 5px 9px; border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; }
+.live-toggle:disabled { opacity: .45; cursor: default; }
+.live-toggle.is-active { color: var(--ink); border-color: var(--green); background: var(--green-soft); }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .4; }
+.live-toggle[data-status="watching"] .live-dot { background: light-dark(#248143, #70c98a); opacity: 1; }
+.live-toggle[data-status="retrying"] .live-dot { background: #d5932b; opacity: 1; }
+@media (max-width: 480px) { .header-actions { gap: 4px; } .live-toggle { padding-inline: 6px; } }

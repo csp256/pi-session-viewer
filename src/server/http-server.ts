@@ -8,6 +8,8 @@ import { computeContextProjections } from './context-projection'
 import { readStaticAsset } from './static-assets'
 import { readCompactSession, readOriginalEntry } from './session-content'
 import { preparedSessionBody, readEventContent } from './prepared-session'
+import { gzip } from 'node:zlib'
+import { createLiveSessionReader } from './live-session'
 import { createLruCache, type LruCache } from '../core/lru-cache'
 
 export interface SessionHttpServerOptions {
@@ -138,6 +140,7 @@ async function handleRequest(
   response: ServerResponse,
   options: SessionHttpServerOptions,
   sessionBodies: SessionBodyCache,
+  live: ReturnType<typeof createLiveSessionReader>,
 ): Promise<void> {
   setSecurityHeaders(response)
 
@@ -179,6 +182,24 @@ async function handleRequest(
 
   if (pathname === '/api/sessions') {
     sendJson(response, 200, await listSessions(options.sessionRoot, options.currentCwd))
+    return
+  }
+
+  if (pathname === '/api/live') {
+    const token = query.get('session')
+    if (!token) { sendJson(response, 400, { error: 'Session is required.' }); return }
+    try {
+      const { absolute, relative } = await resolveAllowedSessionFile(options.sessionRoot, token)
+      const result = await live.read(absolute, relative, token, query.get('leaf') ?? undefined, query.get('cursor') ?? undefined)
+      if (response.destroyed) return
+      if (!result) { response.writeHead(304, { 'Cache-Control': 'no-store' }); response.end(); return }
+      gzip(JSON.stringify(result), { level: 1 }, (error, body) => {
+        if (response.destroyed) return
+        if (error) { sendJson(response, 500, { error: 'Live update unavailable.' }); return }
+        response.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Content-Encoding': 'gzip', 'Cache-Control': 'no-store' })
+        response.end(body)
+      })
+    } catch { if (!response.destroyed) sendJson(response, 404, { error: 'Live session unavailable.' }) }
     return
   }
 
@@ -325,8 +346,9 @@ export async function startSessionHttpServer(options: SessionHttpServerOptions):
     maxWeight: SESSION_BODY_CACHE_WEIGHT,
     weigh: (body) => body.length,
   })
+  const live = createLiveSessionReader()
   const httpServer = createServer((request, response) => {
-    void handleRequest(request, response, options, sessionBodies)
+    void handleRequest(request, response, options, sessionBodies, live)
   })
   const port = await listen(httpServer, host, options.port ?? 0)
   return {
@@ -334,6 +356,6 @@ export async function startSessionHttpServer(options: SessionHttpServerOptions):
     port,
     token: options.token,
     url: `http://${host}:${port}`,
-    close: () => close(httpServer),
+    close: () => { live.dispose(); return close(httpServer) },
   }
 }

@@ -197,6 +197,9 @@ export interface SessionStats {
 }
 
 export interface ParsedSession {
+  sourceLineCount?: number
+  liveCursor?: string
+  preparedDefinitions?: CapturedToolDefinition[]
   displayTitle?: string
   rawEntriesDeferred?: boolean
   preparedViews?: Record<string, SessionView>
@@ -273,4 +276,26 @@ export interface PreparedSessionView {
   turns: Array<Omit<TimelineTurn, 'events'> & { eventIds: string[] }>
   stats: SessionStats
   definitions: CapturedToolDefinition[]
+}
+
+
+export interface PreparedSessionDelta {
+  contextProjection?: ContextProjection
+  parsed: ParsedSession
+  leafId: string | null
+  modifiedAt: string
+  stats: SessionStats
+  definitions?: CapturedToolDefinition[]
+  events: TimelineEvent[]
+  removedEventIds: string[]
+  eventOrder?: string[]
+  turns: Array<Omit<TimelineTurn, 'events'> & { eventIds?: string[]; appendEventIds?: string[] }>
+  removedTurnIds: string[]
+  turnOrder?: string[]
+}
+
+export interface LiveSessionResponse {
+  cursor: string
+  snapshot?: SessionFileResponse
+  delta?: PreparedSessionDelta
 }
