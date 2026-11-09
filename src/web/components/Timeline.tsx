@@ -8,6 +8,7 @@ import type { ContextProjection, EventKind, ParsedSession, SubagentReference, Ti
 import { useI18n } from '../i18n'
 import { orderTimelineTurns, useTimelineOrder } from '../timeline-order'
 import type { EventContentLoader } from '../event-content'
+import { readableText } from '../readable-text'
 
 const EventReader = lazy(() => import('./EventReader').then((module) => ({ default: module.EventReader })))
 
@@ -303,7 +304,7 @@ const EventRow = memo(function EventRow({ event, index, eventCount, turnId, sele
             </span>
           )}
         </span>
-        <span className="event-summary">{event.summary}</span>
+        <span className="event-summary">{readableText(event.summary)}</span>
       </span>
     </div>
   )

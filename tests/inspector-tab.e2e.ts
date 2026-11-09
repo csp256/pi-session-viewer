@@ -37,7 +37,7 @@ for (const tab of ['Overview', 'Content', 'Raw']) {
       await expect(body.locator('.inspector-overview')).toBeVisible()
       await expect(body).toContainText('a1')
     } else {
-      await expect(body.locator(tab === 'Raw' ? '.raw-view pre' : '.content-view pre')).toContainText('First answer')
+      await expect(body.locator(tab === 'Raw' ? '.raw-view pre' : '.content-view')).toContainText('First answer')
     }
     await page.getByRole('checkbox', { name: 'Tool Result', exact: true }).check()
     await page.locator('.event-row.event--tool-result').click()

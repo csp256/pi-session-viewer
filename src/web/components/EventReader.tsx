@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
-import Markdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import { ReadableMarkdown } from './ReadableMarkdown'
+import { readableText } from '../readable-text'
 import type { TimelineEvent } from '../../core/types'
 import { useI18n } from '../i18n'
 import { useEventContent, type EventContentLoader } from '../event-content'
@@ -13,7 +13,7 @@ export function EventReader({ event: originalEvent, onClose, loadContent }: { ev
   const dialog = useRef<HTMLDialogElement>(null)
   const closeButton = useRef<HTMLButtonElement>(null)
   const [source, setSource] = useState(!['user', 'assistant', 'thinking'].includes(event.kind))
-  const content = event.content ?? event.summary
+  const content = readableText(event.content ?? event.summary)
 
   useEffect(() => {
     const element = dialog.current!
@@ -27,7 +27,7 @@ export function EventReader({ event: originalEvent, onClose, loadContent }: { ev
   }, [])
 
   return (
-    <dialog ref={dialog} className="event-reader" aria-labelledby="event-reader-title" onClose={onClose}
+    <dialog ref={dialog} className="event-reader" aria-labelledby="event-reader-title" onClose={(event) => { if (!event.currentTarget.open) onClose() }}
       onClick={(click) => { if (click.target === click.currentTarget) dialog.current?.close() }}>
       <div className="event-reader-layout">
         <header className="event-reader-header">
@@ -42,11 +42,7 @@ export function EventReader({ event: originalEvent, onClose, loadContent }: { ev
             <p>{t.inspector.views.contentLoadError}</p><button type="button" onClick={loaded.retry}>{t.inspector.views.retryRaw}</button>
           </div> : source ? <pre className="event-reader-source">{content}</pre> : (
             <div className="event-reader-markdown">
-              <Markdown remarkPlugins={[remarkGfm]} skipHtml components={{
-                a: ({ children, href }) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
-                // 消息里的远程图片不应在打开弹窗时自动发出请求。
-                img: ({ alt }) => <span className="event-reader-image">[{alt || t.reader.image}]</span>,
-              }}>{content}</Markdown>
+              <ReadableMarkdown>{content}</ReadableMarkdown>
             </div>
           )}
         </div>
