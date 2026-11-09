@@ -25,6 +25,7 @@ Restart Pi or run `/reload`. The extension loads automatically and begins captur
 - Starting the viewer opens a local tokenized dashboard in your browser.
 - Session switches (`/new`, `/resume`, `/fork`) require running `/session-viewer on` again.
 - Discover sessions directly from Pi's storage or import any `.jsonl` session file via the browser.
+- Saved session names are indexed before opening sessions. The first catalog scan reads each file once; later scans reuse a persistent index and read only appended data. The local metadata cache lives under `~/.pi/agent/cache/pi-session-viewer/session-names` (or `PI_CODING_AGENT_DIR`), and can be relocated with `PI_SESSION_VIEWER_CACHE_DIR`. Deleting it safely rebuilds the index; cache write failures fall back to memory.
 - On desktop, drag either sidebar divider to resize it. Widths are remembered for the viewer's origin. Use arrow keys (Shift for larger steps), Home/End for width limits, or double-click a divider to reset that sidebar.
 - The viewer defaults to dark mode. Use the sun/moon button between the language toggle and refresh button to switch themes; your browser remembers the choice for the viewer's origin.
 

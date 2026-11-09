@@ -1,8 +1,7 @@
-import { createReadStream, promises as fs, readFileSync } from 'node:fs'
-import { createInterface } from 'node:readline'
+import { promises as fs, readFileSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { getSessionName, getSessionTitle, parseSessionJsonl } from '../core/session-parser'
+import { getSessionTitle, parseSessionJsonl } from '../core/session-parser'
 import { subagentTargetCandidates } from '../core/subagent-detector'
 import type {
   ProjectSummary,
@@ -12,6 +11,7 @@ import type {
 } from '../core/types'
 import { createLruCache } from '../core/lru-cache'
 import { normalizePath } from '../core/path'
+import { createSessionNameIndex } from './session-name-index'
 
 const SUBAGENT_DIRECTORY_NAMES = new Set(['subagent-artifacts', 'subagents'])
 // Pi run IDs are UUIDs; target paths also use short hex and run-<number> IDs.
@@ -134,10 +134,11 @@ const SESSION_PREFIX_LIMIT = 256 * 1024
 
 /**
  * Catalog rows survive a rescan as long as the file's identity is unchanged.
- * The scan parses each session prefix and streams larger files for appended
- * names. It runs inside the Pi process, so refreshes reuse unchanged metadata.
+ * Session names use a persistent append-aware index; unchanged catalog rows
+ * are also cached in memory so refreshes need only stat each file.
  */
 const metadataCache = createLruCache<SessionListItem | null>({ maxEntries: 4096 })
+const nameIndex = createSessionNameIndex()
 
 function expandHome(value: string): string {
   return value === '~' || value.startsWith('~/') ? path.join(os.homedir(), value.slice(2)) : value
@@ -210,30 +211,6 @@ async function readPrefix(filePath: string, limit = SESSION_PREFIX_LIMIT): Promi
   }
 }
 
-// 名称可在文件末尾追加；逐行读取，仅解析可能的命名条目，不构建完整会话。
-async function readLatestSessionName(filePath: string): Promise<string | undefined> {
-  const input = createReadStream(filePath, { encoding: 'utf8' })
-  const lines = createInterface({ input, crlfDelay: Infinity })
-  let name: string | undefined
-  try {
-    for await (const line of lines) {
-      if (!line.includes('session_info')) continue
-      try {
-        const entry = JSON.parse(line)
-        if (entry?.type === 'session_info' && typeof entry.name === 'string' && entry.name) {
-          name = entry.name
-        }
-      } catch {
-        // 忽略损坏或尚未写完的 JSONL 条目，与会话解析器保持一致。
-      }
-    }
-    return name
-  } finally {
-    lines.close()
-    input.destroy()
-  }
-}
-
 async function sessionMetadata(root: string, filePath: string): Promise<SessionListItem | null> {
   // 先检查文件标识：未修改的文件只需 stat，避免重复读取前缀与名称。
   const stat = await fs.stat(filePath)
@@ -269,9 +246,7 @@ async function readSessionMetadata(
     if (!isSessionCatalogMember(item)) return null
 
     const parsed = parseSessionJsonl(prefix, path.basename(filePath))
-    const name = stat.size > SESSION_PREFIX_LIMIT
-      ? await readLatestSessionName(filePath)
-      : getSessionName(parsed)
+    const { name } = await nameIndex.lookup(filePath)
     return { ...item, title: name ?? getSessionTitle(parsed), ...(name ? { name } : {}) }
   } catch {
     return null

@@ -1,7 +1,7 @@
 import { appendFile, mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { normalizePath } from '../src/core/path'
 import {
   buildProjectSummaries,
@@ -14,7 +14,14 @@ import { piSessionHeader } from './helpers/pi-session'
 
 const directories: string[] = []
 
+beforeEach(async () => {
+  const cache = await mkdtemp(path.join(os.tmpdir(), 'pi-session-discovery-cache-'))
+  directories.push(cache)
+  vi.stubEnv('PI_SESSION_VIEWER_CACHE_DIR', cache)
+})
+
 afterEach(async () => {
+  vi.unstubAllEnvs()
   while (directories.length) {
     await rm(directories.pop() as string, { recursive: true, force: true })
   }
