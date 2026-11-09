@@ -13,6 +13,11 @@
   ],
   "files": [
     "dist",
+    "extension.ts",
+    "src/extension/**/*.ts",
+    "src/server/**/*.ts",
+    "src/core/**/*.ts",
+    "!src/**/*.test.ts",
     "README.md",
     "README.zh-CN.md",
     "LICENSE"
@@ -37,7 +42,7 @@
   },
   "pi": {
     "extensions": [
-      "./dist/extension/index.js"
+      "./extension.ts"
     ],
     "image": "https://raw.githubusercontent.com/hfrancisla/pi-session-viewer/main/assets/gallery-preview.webp"
   },

@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 import os from 'node:os'
 import path from 'node:path'
-import { pathToFileURL } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const run = promisify(execFile)
 const projectRoot = process.cwd()
@@ -28,12 +28,18 @@ try {
   })
 
   const installedRoot = path.join(temporaryRoot, 'node_modules', '@hfrancisla', 'pi-session-viewer')
-  const extensionPath = path.join(installedRoot, 'dist', 'extension', 'index.js')
+  const extensionPath = path.join(installedRoot, 'extension.ts')
   const standalonePath = path.join(installedRoot, 'dist', 'standalone', 'index.js')
   await access(extensionPath)
   await access(path.join(installedRoot, 'dist', 'web', 'index.html'))
 
-  await run(process.execPath, ['--input-type=module', '-e', `const loaded = await import(${JSON.stringify(pathToFileURL(extensionPath).href)}); if (typeof loaded.default !== 'function') process.exit(1)`])
+  // 使用 Pi 的真实加载器验证发布包，而非只导入已编译但不被 Pi 使用的旧入口。
+  const piRoot = path.dirname(path.dirname(fileURLToPath(import.meta.resolve('@earendil-works/pi-coding-agent'))))
+  const { loadExtensions } = await import(pathToFileURL(path.join(piRoot, 'dist/core/extensions/loader.js')).href)
+  const loaded = await loadExtensions([extensionPath], temporaryRoot)
+  if (loaded.errors.length || !loaded.extensions[0]?.commands.has('session-viewer')) {
+    throw new Error(`Packaged extension failed to load: ${JSON.stringify(loaded.errors)}`)
+  }
 
   child = spawn(process.execPath, [standalonePath], {
     cwd: temporaryRoot,

@@ -14,6 +14,8 @@ pi install npm:@hfrancisla/pi-session-viewer
 
 Restart Pi or run `/reload`. The extension loads automatically and begins capturing system prompts on the next turn.
 
+Pi loads the backend through a TypeScript entry so `/reload` picks up backend changes instead of reusing Node's cached compiled ESM. For local checkout updates, run `npm run build`, then `/reload` and `/session-viewer on`; use the newly opened viewer tab.
+
 ## Usage
 
 ```text
