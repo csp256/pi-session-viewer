@@ -1,6 +1,6 @@
 import { allEventKinds, defaultEventKinds } from '../core/event-kinds'
 import { findPreviousPromptSnapshot } from '../core/prompt-diff'
-import { getSessionTitle } from '../core/session-parser'
+import { getSessionName, getSessionTitle } from '../core/session-parser'
 import { buildSessionView, primaryEventForEntry } from '../core/session-view'
 import type {
   ContextProjection,
@@ -370,9 +370,20 @@ export function createSessionViewController<FileHandle = unknown>(
     navigation: readonly SessionNavigationFrame<FileHandle>[] = snapshot.navigation,
   ) => {
     const selected = reconcile(active.parsed, active.contextProjections, requestedLeafId, requestedEventId, buildView)
+    // 完整会话比目录预览更可靠；打开、刷新或从缓存恢复时同步名称。
+    const name = getSessionName(active.parsed)
+    if (name && active.metadata) {
+      active = { ...active, metadata: { ...active.metadata, name, title: name } }
+    }
+    const catalog = name && active.token && active.metadata
+      ? { ...snapshot.catalog, sessions: snapshot.catalog.sessions.map((item) => item.token === active.token
+        ? { ...item, name, title: name, modifiedAt: active.metadata!.modifiedAt }
+        : item) }
+      : snapshot.catalog
     publish({
       ...snapshot,
       active,
+      catalog,
       ...selected,
       loading: false,
       navigation,
@@ -451,7 +462,12 @@ export function createSessionViewController<FileHandle = unknown>(
         catalog: {
           ...snapshot.catalog,
           projects: payload.projects,
-          sessions: payload.sessions,
+          sessions: payload.sessions.map((item) => {
+            // 同版本的完整缓存可修正旧后端或过期目录返回的名称。
+            const parsed = dependencies.cache.recall(sessionCacheKey(item.token, item.modifiedAt))?.parsed
+            const name = parsed ? getSessionName(parsed) : undefined
+            return name ? { ...item, name, title: name } : item
+          }),
           root: payload.root,
           warnings: payload.warnings,
           currentCwd: snapshot.catalog.currentCwd ?? payload.currentCwd ?? null,
@@ -543,7 +559,7 @@ export function createSessionViewController<FileHandle = unknown>(
       if (!isLatest(sequence)) return
       applyCatalog(catalog, catalogError)
 
-      const listedMetadata = catalog?.sessions.find((item) => item.token === serverSource.token)
+      const listedMetadata = catalog ? snapshot.catalog.sessions.find((item) => item.token === serverSource.token) : undefined
       if (listedMetadata && listedMetadata.modifiedAt === serverSource.modifiedAt) {
         publish({ ...snapshot, active: { ...activeAtStart, metadata: listedMetadata }, loading: false, loadError: null })
         return
