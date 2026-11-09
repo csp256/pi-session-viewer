@@ -167,6 +167,28 @@ describe('SessionCatalogDiscovery at Filesystem Seam', () => {
       expect(sessions.find((s) => s.id === 'empty')?.title).toBe('empty.jsonl')
     })
 
+    it('保留带 parentSession 的派生会话及其名称，仍排除已知子代理', async () => {
+      const root = await mkdtemp(path.join(os.tmpdir(), 'pi-session-fork-test-'))
+      directories.push(root)
+      const timestamp = '2026-01-01T10:00:00.000Z'
+      const original = path.join(root, 'symrs.jsonl')
+      await writeFile(original, piSessionHeader('original', timestamp, '/work/symrs') + '\n')
+      const fork = [
+        piSessionHeader('fork', timestamp, '/work/isovis', { parentSession: original }),
+        JSON.stringify({ type: 'custom', id: 'padding', data: 'x'.repeat(300_000) }),
+        JSON.stringify({ type: 'session_info', id: 'name', parentId: 'padding', timestamp, name: 'isovis' }),
+      ].join('\n') + '\n'
+      await writeFile(path.join(root, 'isovis.jsonl'), fork)
+      await writeFile(path.join(root, 'worker.jsonl'), piSessionHeader('subagent-worker', timestamp, '/work/isovis', { parentSession: original }) + '\n')
+      const result = await discoverSessionCatalog(root, '/work/isovis')
+      expect(result.sessions.map((session) => session.id).sort()).toEqual(['fork', 'original'])
+      const session = result.sessions.find((session) => session.id === 'fork')!
+      expect(session).toMatchObject({ name: 'isovis', title: 'isovis', parentSession: original, projectName: 'isovis' })
+      expect(result.projects.find((project) => project.cwd === '/work/isovis')?.count).toBe(1)
+      expect(result.initialSessionToken).toBe(session.token)
+      expect((await listSessions(root)).sessions.find((session) => session.id === 'fork')).toEqual(session)
+    })
+
     it('discovers top-level sessions, excludes subagents/mirrors, and pre-groups catalog', async () => {
       const root = await mkdtemp(path.join(os.tmpdir(), 'pi-session-catalog-test-'))
       directories.push(root)
