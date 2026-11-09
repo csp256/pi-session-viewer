@@ -4,7 +4,7 @@ import { parseSessionJsonl } from '../core/session-parser'
 import { decodeSessionToken, encodeSessionToken } from '../core/session-token'
 import type { ContextProjection, SessionFileResponse, SessionListItem, SessionListResponse } from '../core/types'
 import { createSessionCache, sessionCacheKey } from './session-cache'
-import { createSessionViewController, type SessionViewController } from './session-view-controller'
+import { createSessionViewController, type SessionViewController, type SessionViewBookmark } from './session-view-controller'
 
 const HEADER = JSON.stringify({
   type: 'session',
@@ -76,6 +76,7 @@ function createController(
     readImportedFile?: (file: unknown) => Promise<string>
     refreshCatalog?: () => Promise<SessionListResponse | null>
     parseSession?: typeof parseSessionJsonl
+    initialRestore?: SessionViewBookmark | null
     initialCwd?: string | null
     initialCatalogLoading?: boolean
   } = {},
@@ -91,6 +92,7 @@ function createController(
     cache: options.cache ?? createSessionCache(),
     parseSession: options.parseSession ?? parseSessionJsonl,
     now: () => '2026-01-01T00:00:02.000Z',
+    initialRestore: options.initialRestore,
     initialCwd: options.initialCwd,
     initialCatalogLoading: options.initialCatalogLoading,
   })
@@ -753,4 +755,41 @@ it('Live 更新保持选择和锚点，忽略导航后到达的其他会话更�
   expect(controller.getSnapshot().active?.parsed.liveCursor).toBe('second')
   await controller.dispatch({ type: 'live-update', token: 'somewhere-else', leaf: null, response: { ...response, cursor: 'stale' }, viewport })
   expect(controller.getSnapshot().active?.parsed.liveCursor).toBe('second')
+})
+
+
+it.each([false, true])('手动刷新在最新端时保持跟随（文件变化：%s）', async (changed) => {
+  let revision = 'm1'
+  const read = vi.fn(async () => payload('alpha', content('Updated message'), revision))
+  const controller = createController(read, { refreshCatalog: async () => catalog([session('alpha', revision)]) })
+  await controller.dispatch({ type: 'open', session: session('alpha') })
+  if (changed) revision = 'm2'
+  await controller.dispatch({ type: 'refresh', viewport: { atNewest: true, scrollTop: 800, anchor: { eventId: 'user-1:user', offset: 10 } } })
+  expect(controller.getSnapshot().restoreIntent).toMatchObject({ followNewest: true, eventId: null })
+  expect(controller.getSnapshot().restoreIntent?.anchor).toBeUndefined()
+  expect(controller.getSnapshot().restoreIntent?.scrollTop).toBeUndefined()
+  expect(controller.getSnapshot().selectedEventId).toBe('missing-system-prompt:user-1')
+  expect(read).toHaveBeenCalledTimes(changed ? 2 : 1)
+})
+
+it('导入文件的刷新也在最新端时跟随', async () => {
+  const controller = createController(async () => payload('unused', ''), { readImportedFile: async () => content('Imported') })
+  await controller.dispatch({ type: 'import', source: { name: 'import.jsonl', file: 'file' } })
+  await controller.dispatch({ type: 'refresh', viewport: { atNewest: true, scrollTop: 500, anchor: null } })
+  expect(controller.getSnapshot().restoreIntent?.followNewest).toBe(true)
+})
+
+it('重新加载优先恢复原会话及视图；后续普通导航不复用重新加载位置', async () => {
+  const read = vi.fn(async (token: string) => payload(token, content(token)))
+  const controller = createController(read, { refreshCatalog: async () => catalog([session('alpha'), session('beta')]),
+    initialRestore: { token: 'beta', leafId: null, eventId: 'user-1:user', enabledKinds: ['user', 'assistant'],
+      scopeMode: 'all', projectCwd: '/work/demo', viewport: { atNewest: true, scrollTop: 700, anchor: null } } })
+  await controller.dispatch({ type: 'load-catalog', autoOpen: true })
+  expect(read).toHaveBeenCalledTimes(1)
+  expect(read.mock.calls[0][0]).toBe('beta')
+  expect(controller.getSnapshot().restoreIntent?.followNewest).toBe(true)
+  expect(controller.getSnapshot().selectedEventId).toBe('user-1:user')
+  expect([...controller.getSnapshot().enabledKinds]).toEqual(['user', 'assistant'])
+  await controller.dispatch({ type: 'open', session: session('alpha') })
+  expect(controller.getSnapshot().restoreIntent?.followNewest).not.toBe(true)
 })

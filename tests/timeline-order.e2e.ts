@@ -90,7 +90,8 @@ test('大时间线反转后从最新事件开始，虚拟列表两端仍可到�
     token: 'order', relativePath: 'order.jsonl', modifiedAt: timestamp,
     content: entries.map((entry) => JSON.stringify(entry)).join('\n'),
   } }))
-  await page.reload()
+  // 新导航不恢复重新加载位置；这里单独验证大列表的顺序切换。
+  await page.goto('/?large-order=1#token=dev-token')
   const rows = page.locator('.event-row')
   await expect(rows.first().locator('.event-summary')).toHaveText('Question 0')
   await page.getByRole('button', { name: 'Reverse timeline order' }).click()
